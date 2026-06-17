@@ -14,7 +14,7 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 
-from app.categories import DataCategory, get_category, sources_by_category, category_label
+from app.categories import DataCategory, get_category, sources_by_category, category_label, SOURCE_CATEGORY
 from app.config import FRED_API_KEY, EIA_API_KEY
 from app.storage import (
     init_db,
