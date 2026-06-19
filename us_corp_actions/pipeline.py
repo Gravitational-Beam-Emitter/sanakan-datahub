@@ -441,27 +441,17 @@ def fetch_filings_by_date(date_str: str) -> List[Dict[str, Any]]:
 
 def fetch_filing_items(cik: str, accession_number: str,
                        file_path: str = "",
-                       session: Optional[requests.Session] = None) -> List[str]:
-    """Extract 8-K item numbers from a specific filing.
-
-    Strategy:
-    1. If file_path from daily index is available, use it to build URLs
-    2. Fetch the filing index page (-index.htm) to find form8-k.htm
-    3. Fetch form8-k.htm and extract Item numbers
-    4. Fall back to the .txt version of the filing
-
-    Args:
-        cik: Company CIK number
-        accession_number: SEC accession number (with dashes)
-        file_path: Optional path from daily index (e.g. edgar/data/CIK/ACC.txt)
+                       session: Optional[requests.Session] = None) -> Tuple[List[str], str]:
+    """Extract 8-K item numbers and description text from a specific filing.
 
     Returns:
-        List of item number strings like ['1.01', '2.03']
+        (list of item strings, plain-text description from the 8-K document)
     """
-    items = []
+    items: List[str] = []
+    doc_text = ""
 
     if not accession_number:
-        return items
+        return items, doc_text
 
     acc_no = accession_number.replace("-", "")
 
@@ -488,7 +478,7 @@ def fetch_filing_items(cik: str, accession_number: str,
         resp = fetcher.get(index_url, headers=SEC_HEADERS, timeout=8)
         if resp.status_code != 200:
             logger.debug(f"Index page not accessible: {resp.status_code}")
-            return items
+            return items, doc_text
 
         soup = BeautifulSoup(resp.text, "lxml")
 
@@ -536,23 +526,33 @@ def fetch_filing_items(cik: str, accession_number: str,
         if not doc_url:
             doc_url = f"{base_url}/{accession_number}.txt"
 
-        # Step 3: Fetch the 8-K document and extract items
+        # Step 3: Fetch the 8-K document and extract items + description
         resp_doc = fetcher.get(doc_url, headers=SEC_HEADERS, timeout=8)
         if resp_doc.status_code == 200:
             items = _parse_items_from_filing_document(resp_doc.text)
+            # Extract description text from the 8-K document body
+            try:
+                doc_text = BeautifulSoup(resp_doc.text, "lxml").get_text(" ", strip=True)[:2000]
+            except Exception:
+                pass
             if items:
-                return items
+                return items, doc_text
 
         # Step 4: Try XBRL XML version (more structured) as fallback
         if not items and xml_url:
             resp_xml = fetcher.get(xml_url, headers=SEC_HEADERS, timeout=8)
             if resp_xml.status_code == 200:
                 items = _parse_items_from_filing_document(resp_xml.text)
+                if not doc_text:
+                    try:
+                        doc_text = BeautifulSoup(resp_xml.text, "lxml").get_text(" ", strip=True)[:2000]
+                    except Exception:
+                        pass
 
     except Exception as e:
         logger.debug(f"Failed to extract items for CIK {cik}: {e}")
 
-    return items
+    return items, doc_text
 
 
 def classify_and_prepare(
@@ -601,6 +601,8 @@ def classify_and_prepare(
             ticker = ticker_map.get(cik, "")
         if not ticker:
             ticker = get_ticker_for_cik(conn, cik) or ""
+        if not ticker:
+            ticker = _lookup_ticker_from_sec(cik, session)
 
         # Get company name
         company_name = f.get("company_name", "")
@@ -609,26 +611,31 @@ def classify_and_prepare(
 
         # Get items
         items: List[str] = f.get("items", [])
-        description = f.get("summary", "")[:1000]
+        description = f.get("summary", "")[:2000]
 
         # If items not pre-extracted and fetch_items is enabled, get from SEC
         if not items and fetch_items:
             accession = f.get("accession_number", "")
             if accession:
-                time.sleep(0.05)  # Light rate limiting
+                time.sleep(SEC_RATE_LIMIT)
                 file_path = f.get("file_path", "")
                 try:
-                    items = fetch_filing_items(cik, accession, file_path, session)
+                    items, fetched_text = fetch_filing_items(cik, accession, file_path, session)
+                    if fetched_text and not description:
+                        description = fetched_text
                 except Exception:
                     pass
 
-        # If still no items, extract from text description
+        # If still no items, extract from text description (works for RSS summaries)
         if not items:
             items = _items_from_text(description)
 
         # Classify
         action_type, action_subtype = _classify_items(items, description)
         item_numbers = ",".join(items) if items else ""
+
+        # Extract dates from description
+        dates = _extract_dates(description)
 
         # Build source URL
         source_url = f.get("link", "")
@@ -642,9 +649,9 @@ def classify_and_prepare(
             "action_type": action_type,
             "action_subtype": action_subtype,
             "item_numbers": item_numbers,
-            "effective_date": None,
-            "record_date": None,
-            "pay_date": None,
+            "effective_date": dates.get("effective_date"),
+            "record_date": dates.get("record_date"),
+            "pay_date": dates.get("pay_date"),
             "description": description[:1000],
             "source_url": source_url,
         })
@@ -657,9 +664,97 @@ def classify_and_prepare(
 
 
 def _items_from_text(text: str) -> List[str]:
-    """Try to extract 8-K item references from plain text."""
+    """Try to extract 8-K item references from plain text or HTML."""
+    if not text:
+        return []
     items = re.findall(r"Item\s*(\d+\.\d+)", text, re.IGNORECASE)
     return list(dict.fromkeys(items))
+
+
+def _extract_dates(text: str) -> Dict[str, Optional[str]]:
+    """Extract effective, record, and payment dates from filing text.
+
+    Returns dict with keys: effective_date, record_date, pay_date.
+    """
+    result: Dict[str, Optional[str]] = {
+        "effective_date": None,
+        "record_date": None,
+        "pay_date": None,
+    }
+    if not text:
+        return result
+
+    text_lower = text.lower()
+
+    # Date patterns
+    iso_pat = r"(\d{4}-\d{2}-\d{2})"
+    us_pat = r"(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2}),?\s*(\d{4})"
+
+    def _first_date(pattern, context_words):
+        """Find first date match near a context word."""
+        for word in context_words:
+            idx = text_lower.find(word)
+            if idx >= 0:
+                # Search within 300 chars after the context word
+                snippet = text[idx:idx + 300]
+                m = re.search(pattern, snippet, re.IGNORECASE)
+                if m:
+                    return _normalize_date(m)
+        return None
+
+    def _normalize_date(m):
+        if m.lastindex and m.lastindex >= 3:
+            # US format: month name + day + year
+            month_str, day, year = m.group(1), m.group(2), m.group(3)
+            months = {"jan": "01", "feb": "02", "mar": "03", "apr": "04",
+                      "may": "05", "jun": "06", "jul": "07", "aug": "08",
+                      "sep": "09", "oct": "10", "nov": "11", "dec": "12"}
+            for prefix, num in months.items():
+                if month_str.lower().startswith(prefix):
+                    return f"{year}-{num}-{int(day):02d}"
+        else:
+            # ISO format
+            return m.group(1)
+        return None
+
+    # Effective date
+    result["effective_date"] = _first_date(
+        iso_pat + "|" + us_pat,
+        ["effective", "as of", "commenced on", "entry into", "entered into"],
+    )
+
+    # Record date
+    result["record_date"] = _first_date(
+        iso_pat + "|" + us_pat,
+        ["record date", "record_date", "holders of record", "shareholders of record",
+         "stockholders of record"],
+    )
+
+    # Payment date
+    result["pay_date"] = _first_date(
+        iso_pat + "|" + us_pat,
+        ["payable", "payment date", "pay_date", "paid on", "distribution date",
+         "dividend payable"],
+    )
+
+    return result
+
+
+def _lookup_ticker_from_sec(cik: str, session: Optional[requests.Session] = None) -> str:
+    """Get ticker from SEC submissions API (covers all SEC filers, not just listed)."""
+    try:
+        fetcher = session if session else requests
+        padded = str(int(cik)).zfill(10)
+        url = f"https://data.sec.gov/submissions/CIK{padded}.json"
+        resp = fetcher.get(url, headers=SEC_HEADERS, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            tickers = data.get("tickers", [])
+            if tickers:
+                return tickers[0].upper().strip()
+    except Exception:
+        pass
+    return ""
 
 
 def _clean_html(html_text: str) -> str:
@@ -716,7 +811,7 @@ def init(db_path: Optional[str] = None) -> Dict[str, Any]:
             logger.info(f"  [{i + 1}/{len(dates)}] Fetching {day}...")
             filings = fetch_filings_by_date(day)
             if filings:
-                actions = classify_and_prepare(conn, filings, ticker_map, fetch_items=False)
+                actions = classify_and_prepare(conn, filings, ticker_map, fetch_items=True)
                 if actions:
                     count = upsert_corporate_actions(conn, actions)
                     total_actions += count
@@ -777,8 +872,7 @@ def fetch_daily(date_str: Optional[str] = None, db_path: Optional[str] = None) -
 
         if filings:
             ticker_map = _load_ticker_map(conn)
-            # RSS feed already has items → fetch_items=False
-            actions = classify_and_prepare(conn, filings, ticker_map, fetch_items=False)
+            actions = classify_and_prepare(conn, filings, ticker_map, fetch_items=True)
             if actions:
                 count = upsert_corporate_actions(conn, actions)
                 summary["actions_stored"] = count
