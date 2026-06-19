@@ -4,6 +4,8 @@ eco_data.duckdb
 eco_data.duckdb.wal
 cn_stock.duckdb
 cn_stock.duckdb.wal
+us_corp_actions.duckdb
+us_corp_actions.duckdb.wal
 __pycache__/
 *.pyc
 node_modules/

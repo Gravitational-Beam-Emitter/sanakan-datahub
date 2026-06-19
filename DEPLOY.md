@@ -23,10 +23,17 @@
 │   ├── storage.py                #   DuckDB 读写
 │   ├── tagging.py                #   LLM 原因分析 / 主线归纳
 │   └── scheduler.py              #   定时器（每个交易日 15:37）
-├── frontend/                     # ③ Next.js 前端 — Web UI :3000
+├── us_corp_actions/              # ③ US Corp Actions API — 美国公司行动 :8002
+│   ├── api.py                    #   FastAPI app
+│   ├── config.py                 #   配置（SEC URLs, DB_PATH）
+│   ├── pipeline.py               #   SEC EDGAR 抓取 + 8-K 分类
+│   ├── storage.py                #   DuckDB 读写
+│   └── scheduler.py              #   定时器（每交易日 06:07 HKT）
+├── us_corp_actions.duckdb        # 美国公司行动数据库
+├── frontend/                     # ④ Next.js 前端 — Web UI :3000
 │   ├── src/app/                  #   App Router 页面
 │   ├── src/components/           #   React 组件
-│   ├── src/lib/api.ts            #   API 客户端（读 :8000 / :8001）
+│   ├── src/lib/api.ts            #   API 客户端（读 :8000 / :8001 / :8002）
 │   ├── package.json              #   Next.js 16 + Tailwind v4
 │   └── .env.local                #   前端环境变量
 ├── eco_data_sdk/                 # Python SDK（可选，方便脚本调用）
@@ -75,6 +82,7 @@ EOF
 cat > /opt/eco-data/frontend/.env.local << 'EOF'
 NEXT_PUBLIC_API_URL=http://127.0.0.1:8001
 NEXT_PUBLIC_ECO_API_URL=http://127.0.0.1:8000
+NEXT_PUBLIC_US_CORP_API_URL=http://127.0.0.1:8002
 EOF
 ```
 
@@ -92,6 +100,7 @@ python3 -m pip install \
   duckdb pandas \
   akshare \
   fredapi wbgapi boj-api dbnomics requests \
+  beautifulsoup4 lxml \
   apscheduler python-dotenv \
   openai anthropic
 ```
@@ -130,6 +139,20 @@ python3 -c "from cn_stock.pipeline import fetch_latest; print(fetch_latest(use_l
 ```
 
 这会通过 AKShare 拉取最近一个交易日的数据，并通过 DeepSeek 做 LLM 打标。
+
+### 4.3 美国公司行动数据库
+
+```bash
+cd /opt/eco-data
+python3 -m us_corp_actions.pipeline --init
+```
+
+这会：
+1. 从 SEC 下载 CIK↔Ticker 映射（约 10,000 家美国上市公司）
+2. 从 2026-06-10 起回填所有 8-K 公司行动数据
+3. 按 8-K Item 编号自动分类（并购重组/股权变更/证券发行/退市/破产/股利/股票拆分/股份回购/业绩公告/其他）
+
+成功后 `us_corp_actions.duckdb` 会出现。
 
 ---
 
@@ -236,7 +259,27 @@ WantedBy=multi-user.target
 EOF
 ```
 
-### 6.3 前端（Next.js 生产模式）
+### 6.3 US Corp Actions API（端口 8002）
+
+```bash
+cat > /etc/systemd/system/us-corp-api.service << 'EOF'
+[Unit]
+Description=US Corporate Actions API
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/eco-data
+ExecStart=/usr/bin/python3 -m uvicorn us_corp_actions.api:app --host 127.0.0.1 --port 8002
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+### 6.4 前端（Next.js 生产模式）
 
 ```bash
 cat > /etc/systemd/system/zt-frontend.service << 'EOF'
@@ -256,16 +299,17 @@ WantedBy=multi-user.target
 EOF
 ```
 
-### 6.4 启用所有服务
+### 6.5 启用所有服务
 
 ```bash
 systemctl daemon-reload
 systemctl enable --now eco-data-api
 systemctl enable --now cn-stock-api
+systemctl enable --now us-corp-api
 systemctl enable --now zt-frontend
 
 # 检查状态
-systemctl status eco-data-api cn-stock-api zt-frontend
+systemctl status eco-data-api cn-stock-api us-corp-api zt-frontend
 ```
 
 ---
@@ -374,6 +418,31 @@ systemctl enable --now cn-stock-scheduler
 
 每个交易日 15:37 自动抓取当日涨停数据 + LLM 打标。
 
+### 美国公司行动每日抓取
+
+```bash
+cat > /etc/systemd/system/us-corp-scheduler.service << 'EOF'
+[Unit]
+Description=US Corp Actions Daily Scheduler
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/eco-data
+ExecStart=/usr/bin/python3 -m us_corp_actions.scheduler
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now us-corp-scheduler
+```
+
+每交易日 06:07 HKT（≈ 美东 18:07 T-1）自动抓取 SEC EDGAR 8-K 公司行动数据并分类。
+
 ---
 
 ## API 接口文档
@@ -414,6 +483,36 @@ systemctl enable --now cn-stock-scheduler
 | GET | `/api/v1/dates` | 可用交易日列表 |
 | POST | `/api/v1/fetch?date=20260612` | 触发数据抓取（不传 date 默认最新） |
 
+### US Corp Actions API（端口 8002）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/v1/health` | 健康检查 |
+| GET | `/api/v1/actions/{date}` | 某日完整公司行动复盘（含 summary + actions + breakdown） |
+| GET | `/api/v1/actions?start=YYYYMMDD&end=YYYYMMDD&action_type=dividend&ticker=AAPL` | 按条件筛选公司行动 |
+| GET | `/api/v1/actions/ticker/{ticker}` | 某 ticker 的历史公司行动 |
+| GET | `/api/v1/dates` | 可用交易日列表 |
+| GET | `/api/v1/summary?start=YYYYMMDD&end=YYYYMMDD` | 日期范围内的每日汇总 |
+| GET | `/api/v1/breakdown/{date}` | 某日行动类型分布 |
+| GET | `/api/v1/fetch/status` | 最近抓取状态 |
+| POST | `/api/v1/fetch?date=20260618` | 触发数据抓取（不传 date 默认上一交易日） |
+| POST | `/api/v1/init` | 初始化：下载 CIK 映射 + 回填历史数据 |
+
+行动类型（action_type）：
+
+| 类型 | 英文 | 8-K Items |
+|------|------|-----------|
+| 并购重组 | merger_acquisition | 1.01, 2.01 |
+| 股权变更 | equity_change | 5.01-5.08 |
+| 证券发行 | securities_issuance | 3.02, 3.03 |
+| 退市 | delisting | 3.01 |
+| 破产 | bankruptcy | 1.03 |
+| 股利 | dividend | 8.01 (keyword) |
+| 股票拆分 | stock_split | 8.01 (keyword) |
+| 股份回购 | buyback | 8.01 (keyword) |
+| 业绩公告 | earnings | 2.02 |
+| 其他 | other | 8.01, 9.01 |
+
 ---
 
 ## 前端数据流
@@ -424,6 +523,7 @@ systemctl enable --now cn-stock-scheduler
                       ▼
               Next.js (:3000)  ──服务端 fetch──►  cn_stock API (:8001)
               （Server Components）               Eco Data API (:8000)
+                                                  US Corp API (:8002)
                       │
                       ▼
               HTML 页面（含 Glass UI + 暗色主题）

@@ -1,5 +1,6 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8001";
 const ECO_API = process.env.NEXT_PUBLIC_ECO_API_URL || "http://127.0.0.1:8000";
+const US_CORP_API = process.env.NEXT_PUBLIC_US_CORP_API_URL || "http://127.0.0.1:8002";
 
 /* ── Multi-date aggregation types ── */
 
@@ -218,6 +219,109 @@ export async function fetchMacroDataRange(macroIds: number[], start: string, end
   );
   return results;
 }
+
+/* ── US Corporate Actions (:8002) ── */
+
+export interface CorpAction {
+  filing_date: string;
+  ticker: string;
+  company_name: string;
+  action_type: string;
+  action_subtype: string | null;
+  item_numbers: string | null;
+  description: string | null;
+  source_url: string | null;
+}
+
+export interface CorpActionSummary {
+  date: string;
+  total: number;
+  companies: number;
+  type_count: number;
+}
+
+export interface CorpActionBreakdown {
+  action_type: string;
+  cnt: number;
+  companies: number;
+}
+
+export interface CorpActionDailyReview {
+  date: string;
+  summary: CorpActionSummary;
+  actions: CorpAction[];
+  breakdown: CorpActionBreakdown[];
+}
+
+export interface CorpActionDateSummary {
+  start: string;
+  end: string;
+  daily_totals: { date: string; total: number; companies: number }[];
+  type_breakdown: { date: string; action_type: string; cnt: number }[];
+}
+
+export async function fetchCorpActionsByDate(date: string): Promise<CorpActionDailyReview> {
+  const res = await fetch(`${US_CORP_API}/api/v1/actions/${date}`, {
+    next: { revalidate: 300 },
+  });
+  if (!res.ok) throw new Error(`Failed to fetch corp actions: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchCorpActions(params?: {
+  start?: string;
+  end?: string;
+  action_type?: string;
+  ticker?: string;
+  limit?: number;
+}): Promise<CorpAction[]> {
+  const sp = new URLSearchParams();
+  if (params?.start) sp.set("start", params.start);
+  if (params?.end) sp.set("end", params.end);
+  if (params?.action_type) sp.set("action_type", params.action_type);
+  if (params?.ticker) sp.set("ticker", params.ticker);
+  if (params?.limit) sp.set("limit", String(params.limit));
+  const qs = sp.toString();
+  const res = await fetch(`${US_CORP_API}/api/v1/actions${qs ? `?${qs}` : ""}`, {
+    next: { revalidate: 300 },
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.actions || [];
+}
+
+export async function fetchTickerActions(ticker: string): Promise<CorpAction[]> {
+  const res = await fetch(`${US_CORP_API}/api/v1/actions/ticker/${ticker}`, {
+    next: { revalidate: 300 },
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.actions || [];
+}
+
+export async function fetchCorpActionDates(): Promise<string[]> {
+  const res = await fetch(`${US_CORP_API}/api/v1/dates`, {
+    next: { revalidate: 60 },
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.dates || [];
+}
+
+export async function fetchCorpActionSummary(start: string, end: string): Promise<CorpActionDateSummary> {
+  const res = await fetch(`${US_CORP_API}/api/v1/summary?start=${start}&end=${end}`, {
+    next: { revalidate: 300 },
+  });
+  if (!res.ok) return { start, end, daily_totals: [], type_breakdown: [] };
+  return res.json();
+}
+
+export async function triggerCorpFetch(date?: string): Promise<void> {
+  const params = date ? `?date=${date}` : "";
+  await fetch(`${US_CORP_API}/api/v1/fetch${params}`, { method: "POST" });
+}
+
+/* ── Macro indicators (eco data API :8000) ── */
 
 export async function fetchMacroBackground(): Promise<MacroIndicator[]> {
   const results = await Promise.all(

@@ -1277,7 +1277,7 @@ def _generate_aml_indicators():
             "params": {"country": c, "list_type": "grey"},
             "description": f"FATF灰名单（加强监控司法管辖区）·{c}·Wikipedia FATF黑名单页面·每次FATF全会后更新",
             "frequency": "event",
-            "tags": "AML风险,金融合规",
+            "tags": "AML风险,金融合规,FATF",
         })
 
     # FATF Black List — per country
@@ -1289,7 +1289,7 @@ def _generate_aml_indicators():
             "params": {"country": c, "list_type": "black"},
             "description": f"FATF黑名单（呼吁采取行动的高风险司法管辖区）·{c}·Wikipedia FATF黑名单页面·每次FATF全会后更新",
             "frequency": "event",
-            "tags": "AML风险,金融合规",
+            "tags": "AML风险,金融合规,FATF",
         })
 
     # FATF aggregates
@@ -1298,14 +1298,14 @@ def _generate_aml_indicators():
         "method": "fatf_grey_list_count", "params": {},
         "description": "FATF灰名单（加强监控）国家数量·Wikipedia FATF黑名单页面·每次FATF全会后更新",
         "frequency": "event",
-        "tags": "AML风险,金融合规",
+        "tags": "AML风险,金融合规,FATF",
     })
     entries.append({
         "source": "aml", "name": "FATF Black List Count",
         "method": "fatf_black_list_count", "params": {},
         "description": "FATF黑名单（呼吁采取行动）国家数量·Wikipedia FATF黑名单页面·每次FATF全会后更新",
         "frequency": "event",
-        "tags": "AML风险,金融合规",
+        "tags": "AML风险,金融合规,FATF",
     })
 
     # INCSR — per country (all 81 jurisdictions)
@@ -1336,7 +1336,7 @@ def _generate_aml_indicators():
             "params": {"country": c},
             "description": f"美国国务院INCSR Vol.II主要洗钱关注国·{c}·年度更新·每年3月发布",
             "frequency": "annual",
-            "tags": "AML风险,金融合规",
+            "tags": "AML风险,金融合规,INCSR",
         })
 
     # INCSR aggregate
@@ -1345,7 +1345,7 @@ def _generate_aml_indicators():
         "method": "incsr_listed_count", "params": {},
         "description": "美国国务院INCSR Vol.II列为洗钱主要关注国的司法管辖区数量·年度更新·每年3月发布",
         "frequency": "annual",
-        "tags": "AML风险,金融合规",
+        "tags": "AML风险,金融合规,INCSR",
     })
 
     # Basel AML Index — per country (G20 + top/bottom risk extremes)
@@ -1385,7 +1385,7 @@ def _generate_aml_indicators():
             "params": {"country": c},
             "description": f"巴塞尔AML指数·{c}·综合评分0-10·177国排名·年度更新·每年12月发布",
             "frequency": "annual",
-            "tags": "AML风险,金融合规",
+            "tags": "AML风险,金融合规,Basel",
         })
 
     # Basel aggregates
@@ -1394,14 +1394,14 @@ def _generate_aml_indicators():
         "method": "basel_top_risks", "params": {"n": 10},
         "description": "巴塞尔AML指数风险最高的10个国家·年度更新",
         "frequency": "annual",
-        "tags": "AML风险,金融合规",
+        "tags": "AML风险,金融合规,Basel",
     })
     entries.append({
         "source": "aml", "name": "Basel AML Index Bottom 10 Risks",
         "method": "basel_lowest_risks", "params": {"n": 10},
         "description": "巴塞尔AML指数风险最低的10个国家·年度更新",
         "frequency": "annual",
-        "tags": "AML风险,金融合规",
+        "tags": "AML风险,金融合规,Basel",
     })
 
     return entries
@@ -1452,7 +1452,7 @@ def _generate_sanctions_indicators():
             "params": {"country": c},
             "description": f"OFAC SDN制裁·{c}·按国家聚合被制裁实体/个人/船舶/飞行器数量·每日更新·美国财政部OFAC",
             "frequency": "daily",
-            "tags": "AML风险,金融合规,制裁",
+            "tags": "AML风险,金融合规,制裁,OFAC",
         })
 
     # OFAC total counts
@@ -1461,7 +1461,7 @@ def _generate_sanctions_indicators():
         "method": "ofac_total_counts", "params": {},
         "description": "OFAC SDN制裁总计·实体+个人+船舶+飞行器总数量及制裁计划数·每日更新·美国财政部OFAC",
         "frequency": "daily",
-        "tags": "AML风险,金融合规,制裁",
+        "tags": "AML风险,金融合规,制裁,OFAC",
     })
 
     # OFAC sanctions by country (all countries aggregate)
@@ -1470,7 +1470,7 @@ def _generate_sanctions_indicators():
         "method": "ofac_sanctions_by_country", "params": {},
         "description": "OFAC SDN制裁按国家聚合·所有国家被制裁实体/个人/船舶/飞行器分布·每日更新·美国财政部OFAC",
         "frequency": "daily",
-        "tags": "AML风险,金融合规,制裁",
+        "tags": "AML风险,金融合规,制裁,OFAC",
     })
 
     # CPI — per country scores
@@ -1509,7 +1509,7 @@ def _generate_sanctions_indicators():
             "params": {"country": c},
             "description": f"透明国际腐败感知指数·{c}·0-100评分·180国排名·年度更新·Transparency International CPI",
             "frequency": "annual",
-            "tags": "AML风险,金融合规,腐败",
+            "tags": "AML风险,金融合规,腐败,CPI",
         })
 
     # CPI aggregates
@@ -1518,14 +1518,14 @@ def _generate_sanctions_indicators():
         "method": "cpi_top_risks", "params": {"n": 10},
         "description": "透明国际腐败感知指数·最腐败10国·0-100最低分·年度更新·Transparency International CPI",
         "frequency": "annual",
-        "tags": "AML风险,金融合规,腐败",
+        "tags": "AML风险,金融合规,腐败,CPI",
     })
     entries.append({
         "source": "sanctions", "name": "TI CPI Top 10 Least Corrupt",
         "method": "cpi_cleanest", "params": {"n": 10},
         "description": "透明国际腐败感知指数·最清廉10国·0-100最高分·年度更新·Transparency International CPI",
         "frequency": "annual",
-        "tags": "AML风险,金融合规,腐败",
+        "tags": "AML风险,金融合规,腐败,CPI",
     })
 
     return entries

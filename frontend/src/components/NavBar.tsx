@@ -8,6 +8,7 @@ const TABS = [
   { href: "/backtest", label: "回测" },
   { href: "/sectors", label: "题材轮动" },
   { href: "/cross", label: "宏观交叉" },
+  { href: "/us-corp-actions", label: "US公司行动" },
 ];
 
 export default function NavBar() {
