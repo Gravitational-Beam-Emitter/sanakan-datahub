@@ -51,6 +51,7 @@ from app.eco_harness.aml_ratings import AMLRatingsHarness
 from app.eco_harness.sanctions import SanctionsHarness
 from app.eco_harness.name_screening import NameScreeningHarness
 from app.eco_harness.concept_boards import ConceptBoardHarness
+from app.eco_harness.opticals import OpticalsHarness
 
 try:
     from app.eco_harness.sdmx import SDMXHarness
@@ -89,7 +90,7 @@ class _CategoryView:
 class EcoHarness:
     __slots__ = ('us', 'cn', 'hk', 'bond', 'futures', 'global_', 'sdmx',
                  'jp', 'euro', 'uk', 'de', 'au', 'ca', 'ch', 'shipping',
-                 'banks', 'alt', 'llm', 'defi', 'energy', 'ai', 'ai_co', 'cb', 'aml', 'sanctions', 'name_screening',
+                 'banks', 'alt', 'llm', 'defi', 'energy', 'ai', 'ai_co', 'cb', 'optical', 'aml', 'sanctions', 'name_screening',
                  '_macro_view', '_risk_view')
 
     def __init__(self, fred_api_key: str = '', eia_api_key: str = ''):
@@ -116,6 +117,7 @@ class EcoHarness:
         self.ai = AIInfraHarness(fred_api_key)
         self.ai_co = AICompaniesHarness()
         self.cb = ConceptBoardHarness()
+        self.optical = OpticalsHarness()
         self.aml = AMLRatingsHarness()
         self.sanctions = SanctionsHarness()
         self.name_screening = NameScreeningHarness()
@@ -141,7 +143,7 @@ class EcoHarness:
     @property
     def available_sources(self):
         sources = ['us', 'cn', 'hk', 'global_', 'jp', 'euro', 'uk', 'de',
-                   'au', 'ca', 'ch', 'shipping', 'banks', 'alt', 'llm', 'defi', 'energy', 'ai', 'ai_co', 'cb', 'aml', 'sanctions', 'name_screening']
+                   'au', 'ca', 'ch', 'shipping', 'banks', 'alt', 'llm', 'defi', 'energy', 'ai', 'ai_co', 'cb', 'optical', 'aml', 'sanctions', 'name_screening']
         if _HAS_SDMX:
             sources.append('sdmx')
         return [{"key": s, "category": get_category(s).value} for s in sources]

@@ -6,9 +6,16 @@ cn_stock.duckdb
 cn_stock.duckdb.wal
 us_corp_actions.duckdb
 us_corp_actions.duckdb.wal
+announcements.duckdb
+announcements.duckdb.wal
+hk_funds.duckdb
+hk_funds.duckdb.wal
+us_listings.duckdb
+us_listings.duckdb.wal
 __pycache__/
 *.pyc
 node_modules/
 .next/
 .DS_Store
-.claude/
+.claude/settings.local.json
+.claude/worktrees/

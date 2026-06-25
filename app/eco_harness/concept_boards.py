@@ -42,6 +42,19 @@ BOARDS = {
     "phosphate_chem":   ("BK1010", "磷化工", "磷化铟,磷化工,化工"),
     # ── 覆铜板 (CCL) ──
     "pcb":              ("BK0877", "PCB", "覆铜板,PCB,印制电路,CCL"),
+    # ── 光纤 / 光缆 ──
+    "optical_fiber":    ("BK1660", "光纤概念", "光通信,光纤,光缆"),
+    # ── 先进封装 ──
+    "glass_substrate":  ("BK1175", "玻璃基板", "先进封装,玻璃载板,AI芯片"),
+    "chiplet":          ("BK1101", "Chiplet概念", "先进封装,芯粒,chiplet"),
+    # ── 数据中心互连 ──
+    "copper_connect":   ("BK1168", "铜缆高速连接", "AI数据中心,连接器,铜缆"),
+    "f5g":              ("BK1088", "F5G概念", "光通信,F5G,全光网络"),
+    "east_west_compute": ("BK1064", "东数西算", "算力,数据中心,东数西算"),
+    # ── 光刻 / 显示 / 被动元件 ──
+    "lithography":      ("BK0884", "光刻机(胶)", "半导体,光刻,光刻胶"),
+    "micro_led":        ("BK0948", "MicroLED", "显示,MicroLED"),
+    "mlcc":             ("BK0890", "MLCC", "被动元件,MLCC,电容"),
 }
 
 
@@ -162,6 +175,59 @@ class ConceptBoardHarness:
     def phosphate_chem(self):
         """磷化工指数 — 磷化铟上游/磷矿/磷肥 (daily)."""
         df = self._get_board("phosphate_chem")
+        return df[["date", "close"]].rename(columns={"close": "value"})
+
+    # ── 光纤 / 光缆 ──
+
+    def optical_fiber(self):
+        """光纤概念指数 — 光纤/光缆 (daily)."""
+        df = self._get_board("optical_fiber")
+        return df[["date", "close"]].rename(columns={"close": "value"})
+
+    # ── 先进封装 ──
+
+    def glass_substrate(self):
+        """玻璃基板指数 — 玻璃载板/先进封装 (daily)."""
+        df = self._get_board("glass_substrate")
+        return df[["date", "close"]].rename(columns={"close": "value"})
+
+    def chiplet(self):
+        """Chiplet概念指数 — 先进封装/芯粒 (daily)."""
+        df = self._get_board("chiplet")
+        return df[["date", "close"]].rename(columns={"close": "value"})
+
+    # ── 数据中心互连 ──
+
+    def copper_connect(self):
+        """铜缆高速连接指数 — AI数据中心互连/连接器 (daily)."""
+        df = self._get_board("copper_connect")
+        return df[["date", "close"]].rename(columns={"close": "value"})
+
+    def f5g(self):
+        """F5G概念指数 — 第五代固定网络/全光网络 (daily)."""
+        df = self._get_board("f5g")
+        return df[["date", "close"]].rename(columns={"close": "value"})
+
+    def east_west_compute(self):
+        """东数西算指数 — 算力枢纽/数据中心 (daily)."""
+        df = self._get_board("east_west_compute")
+        return df[["date", "close"]].rename(columns={"close": "value"})
+
+    # ── 光刻 / 显示 / 被动元件 ──
+
+    def lithography(self):
+        """光刻机(胶)指数 — 光刻机/光刻胶 (daily)."""
+        df = self._get_board("lithography")
+        return df[["date", "close"]].rename(columns={"close": "value"})
+
+    def micro_led(self):
+        """MicroLED指数 — MicroLED显示 (daily)."""
+        df = self._get_board("micro_led")
+        return df[["date", "close"]].rename(columns={"close": "value"})
+
+    def mlcc(self):
+        """MLCC指数 — 多层陶瓷电容/被动元件 (daily)."""
+        df = self._get_board("mlcc")
         return df[["date", "close"]].rename(columns={"close": "value"})
 
     # ── 覆铜板 (CCL) ──

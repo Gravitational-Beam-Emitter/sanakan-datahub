@@ -9,6 +9,12 @@ const TABS = [
   { href: "/sectors", label: "题材轮动" },
   { href: "/cross", label: "宏观交叉" },
   { href: "/us-corp-actions", label: "US公司行动" },
+  { href: "/us-listings", label: "US上市" },
+  { href: "/hk-funds", label: "HK基金" },
+  { href: "/announcements", label: "公告" },
+  { href: "/tw-stock", label: "TW台股" },
+  { href: "/kr-stock", label: "KR韩股" },
+  { href: "/industry-chain", label: "产业链" },
 ];
 
 export default function NavBar() {

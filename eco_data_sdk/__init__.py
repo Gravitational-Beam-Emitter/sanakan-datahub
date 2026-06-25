@@ -1,34 +1,59 @@
 """
-Eco Data SDK — Python client for the Eco Data API.
+Eco Data SDK — Python clients for all Eco Data API services.
+
+Services:
+    EcoDataClient         — port 8000, economic indicators & macro data
+    CnStockClient         — port 8001, A-share limit-up review
+    UsCorpActionsClient   — port 8002, US corporate actions (SEC 8-K)
+    UsListingsClient      — port 8003, US listings & crypto products
+    HkFundsClient         — port 8004, HK funds KYP/DD
+    AnnouncementsClient   — port 8005, multi-market company announcements
+    KrStockClient         — port 8006, Korean stock market (KOSPI/KOSDAQ/KONEX)
+    TwStockClient         — port 8007, Taiwan stock market (TWSE/TPEx)
 
 Usage:
-    from eco_data_sdk import EcoDataClient
+    from eco_data_sdk import EcoDataClient, CnStockClient, UsCorpActionsClient
+    from eco_data_sdk import UsListingsClient, HkFundsClient, AnnouncementsClient
+    from eco_data_sdk import KrStockClient
 
-    client = EcoDataClient()                          # default: http://localhost:8000
-    client = EcoDataClient(base_url="https://...")   # remote
+    eco = EcoDataClient()
+    indicators = eco.list_indicators(source="cn")
 
-    # List all indicators
-    indicators = client.list_indicators()
-    indicators = client.list_indicators(source="cn")
+    cn = CnStockClient()
+    review = cn.daily_review("2025-06-20")
 
-    # Get indicator detail
-    ind = client.get_indicator(1)
+    us_corp = UsCorpActionsClient()
+    actions = us_corp.list_actions(start="2025-06-01")
 
-    # Search
-    results = client.search("GDP")
+    us_list = UsListingsClient()
+    ipos = us_list.upcoming_listings()
 
-    # Query data
-    data = client.query_data(3, start="2024-01-01", limit=100)
+    hk = HkFundsClient()
+    funds = hk.list_funds(domicile="Hong Kong")
 
-    # Latest value
-    latest = client.latest(3)
+    ann = AnnouncementsClient()
+    filings = ann.list_announcements(market="us", limit=50)
 
-    # Trigger refresh
-    summary = client.fetch()
-    summary = client.fetch(source="cn")
-
-    # Health
-    health = client.health()
+    kr = KrStockClient()
+    kospi = kr.list_listings(market="KOSPI")
 """
 
 from eco_data_sdk.client import EcoDataClient
+from eco_data_sdk.cn_stock_client import CnStockClient
+from eco_data_sdk.us_corp_actions_client import UsCorpActionsClient
+from eco_data_sdk.us_listings_client import UsListingsClient
+from eco_data_sdk.hk_funds_client import HkFundsClient
+from eco_data_sdk.announcements_client import AnnouncementsClient
+from eco_data_sdk.kr_stock_client import KrStockClient
+from eco_data_sdk.tw_stock_client import TwStockClient
+
+__all__ = [
+    "EcoDataClient",
+    "CnStockClient",
+    "UsCorpActionsClient",
+    "UsListingsClient",
+    "HkFundsClient",
+    "AnnouncementsClient",
+    "KrStockClient",
+    "TwStockClient",
+]
