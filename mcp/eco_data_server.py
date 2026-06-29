@@ -293,7 +293,7 @@ def tool_name_screening_stats() -> dict:
 # ── HK Funds tools ─────────────────────────────────────────────
 
 _HK_DB = os.path.join(os.path.dirname(os.path.dirname(__file__)), "hk_funds.duckdb")
-_US_CORP_DB = os.path.join(os.path.dirname(os.path.dirname(__file__)), "us_corp_actions", "us_corp_actions.duckdb")
+_US_CORP_DB = os.path.join(os.path.dirname(os.path.dirname(__file__)), "us_corp_actions.duckdb")
 _US_LIST_DB = os.path.join(os.path.dirname(os.path.dirname(__file__)), "us_listings", "us_listings.duckdb")
 _ANNO_DB = os.path.join(os.path.dirname(os.path.dirname(__file__)), "announcements", "announcements.duckdb")
 _KR_DB = os.path.join(os.path.dirname(os.path.dirname(__file__)), "kr_stock", "kr_stock.duckdb")

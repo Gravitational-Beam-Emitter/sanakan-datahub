@@ -27,7 +27,7 @@ SEC_HEADERS = {
 }
 
 # ── Pipeline ──
-LOOKBACK_DAYS = 90  # Data retention: auto-delete records older than this
+LOOKBACK_DAYS = 1095  # Data retention: auto-delete records older than 3 years
 BACKFILL_START = "2026-06-10"  # Start date for historical backfill
 
 # Rate limiting: SEC allows ~10 requests/second, we stay well under

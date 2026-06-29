@@ -19,3 +19,5 @@ node_modules/
 .DS_Store
 .claude/settings.local.json
 .claude/worktrees/
+us_corp_actions/scheduler.log
+us_corp_actions/scheduler_error.log

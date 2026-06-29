@@ -614,6 +614,7 @@ def classify_and_prepare(
     filings: List[Dict[str, Any]],
     ticker_map: Optional[Dict[str, str]] = None,
     fetch_items: bool = False,
+    fetch_exhibits: bool = True,
 ) -> List[Dict[str, Any]]:
     """Classify a list of filings into corporate actions.
 
@@ -624,6 +625,13 @@ def classify_and_prepare(
     4. Return structured records
 
     Args:
+        conn: DuckDB connection
+        filings: List of raw filing dicts from SEC
+        ticker_map: Optional pre-loaded CIK→ticker dict
+        fetch_items: If True, fetch items from SEC filing pages (slow).
+                     If False (default for backfill), use keyword classification only.
+        fetch_exhibits: If True, fetch EX-99 press releases for date-critical types.
+                        If False (for fast backfill), skip exhibit fetching.
         conn: DuckDB connection
         filings: List of raw filing dicts from SEC
         ticker_map: Optional pre-loaded CIK→ticker dict
@@ -691,7 +699,7 @@ def classify_and_prepare(
 
         # For types where dates are critical, fetch exhibit text (press releases)
         DATE_CRITICAL_TYPES = {"dividend", "stock_split", "merger_acquisition", "buyback"}
-        if fetch_items and action_type in DATE_CRITICAL_TYPES:
+        if fetch_exhibits and fetch_items and action_type in DATE_CRITICAL_TYPES:
             accession = f.get("accession_number", "")
             if accession:
                 # Always fetch index page for exhibits, even if items were pre-extracted
@@ -995,14 +1003,28 @@ def fetch_daily(date_str: Optional[str] = None, db_path: Optional[str] = None) -
         logger.info(f"Fetching 8-K filings for {date_str}...")
 
         # Fetch filings from RSS feed (has items pre-extracted in summary)
-        filings = fetch_filings_rss(date_str)
-        summary["filings_found"] = len(filings)
+        rss_filings = fetch_filings_rss(date_str)
+        logger.info(f"RSS feed returned {len(rss_filings)} filings for {date_str}")
 
-        # If RSS returns nothing (e.g. for older dates), fall back to daily index
-        if not filings:
-            logger.info(f"RSS feed returned no filings for {date_str}, trying daily index...")
-            filings = fetch_filings_by_date(date_str)
-            summary["filings_found"] = len(filings)
+        # Always also fetch daily index for complete coverage
+        # (RSS feed is limited to ~100 most recent entries, so it can miss filings)
+        idx_filings = fetch_filings_by_date(date_str)
+        logger.info(f"Daily index returned {len(idx_filings)} filings for {date_str}")
+
+        # Merge: prefer RSS entries (they have pre-extracted items),
+        # supplement with daily index entries not seen in RSS
+        rss_keys = {(f["cik"], f["filing_date"], f["form_type"]) for f in rss_filings}
+        added = 0
+        for f in idx_filings:
+            key = (f["cik"], f["filing_date"], f["form_type"])
+            if key not in rss_keys:
+                rss_filings.append(f)
+                added += 1
+        if added:
+            logger.info(f"Added {added} filings from daily index not in RSS feed")
+
+        filings = rss_filings
+        summary["filings_found"] = len(filings)
 
         if filings:
             ticker_map = _load_ticker_map(conn)
