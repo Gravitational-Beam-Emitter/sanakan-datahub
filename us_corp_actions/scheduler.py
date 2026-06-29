@@ -52,11 +52,16 @@ def start_scheduler() -> BackgroundScheduler:
 
 def _run() -> None:
     """Run the daily fetch for the previous trading day."""
-    # Fetch yesterday's date (US market close, available by ~06:00 HKT next day)
-    yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
-    logger.info(f"Running daily US corporate actions fetch for {yesterday}...")
+    # Find the most recent trading day (skip weekends)
+    yesterday = datetime.now() - timedelta(days=1)
+    if yesterday.weekday() == 5:  # Saturday → Friday
+        yesterday -= timedelta(days=1)
+    elif yesterday.weekday() == 6:  # Sunday → Friday
+        yesterday -= timedelta(days=2)
+    date_str = yesterday.strftime("%Y-%m-%d")
+    logger.info(f"Running daily US corporate actions fetch for {date_str}...")
     start = time.time()
-    result = fetch_daily(yesterday)
+    result = fetch_daily(date_str)
     elapsed = time.time() - start
     logger.info(
         f"Daily fetch done in {elapsed:.1f}s — "
