@@ -27,9 +27,11 @@ function addDays(ymd: string, n: number): string {
 export default function DateNav({
   date,
   availableDates,
+  basePath = "/",
 }: {
   date: string;
   availableDates: string[];
+  basePath?: string;
 }) {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
@@ -37,9 +39,9 @@ export default function DateNav({
 
   const navigate = useCallback(
     (d: string) => {
-      router.push(`/?date=${d}`);
+      router.push(`${basePath}?date=${d}`);
     },
-    [router]
+    [router, basePath]
   );
 
   const prev = addDays(date, -1);

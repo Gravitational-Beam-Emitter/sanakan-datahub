@@ -276,7 +276,7 @@ def upsert_listed_stocks(conn: duckdb.DuckDBPyConnection, df: pd.DataFrame) -> i
     """Batch insert/update listed stocks. Returns row count."""
     if df.empty:
         return 0
-    needed = ["code", "name", "name_en", "market", "sector", "industry",
+    needed = ["code", "name", "name_en", "name_zh", "market", "sector", "industry",
               "listing_date", "shares_outstanding", "market_cap"]
     for col in needed:
         if col not in df.columns:
@@ -284,14 +284,15 @@ def upsert_listed_stocks(conn: duckdb.DuckDBPyConnection, df: pd.DataFrame) -> i
     sub = df[needed].copy()
     conn.register("_tmp_kls", sub)
     rows = conn.execute("""
-        INSERT INTO kr_listed_stocks (code, name, name_en, market, sector, industry,
+        INSERT INTO kr_listed_stocks (code, name, name_en, name_zh, market, sector, industry,
                                        listing_date, shares_outstanding, market_cap)
-        SELECT code, name, name_en, market, sector, industry,
+        SELECT code, name, name_en, name_zh, market, sector, industry,
                listing_date, shares_outstanding, market_cap
         FROM _tmp_kls
         ON CONFLICT (code) DO UPDATE SET
             name = excluded.name,
             name_en = COALESCE(excluded.name_en, kr_listed_stocks.name_en),
+            name_zh = COALESCE(excluded.name_zh, kr_listed_stocks.name_zh),
             market = excluded.market,
             sector = excluded.sector,
             industry = excluded.industry,
@@ -616,7 +617,7 @@ def get_listed_stocks(conn: duckdb.DuckDBPyConnection, market: str = None, secto
         params.extend([f"%{search}%", f"%{search}%"])
     params.append(limit)
     return conn.execute(f"""
-        SELECT code, name, name_en, market, sector, industry, listing_date, market_cap
+        SELECT code, name, name_en, name_zh, market, sector, industry, listing_date, market_cap
         FROM kr_listed_stocks
         WHERE {' AND '.join(where)}
         ORDER BY market_cap DESC NULLS LAST
@@ -627,15 +628,15 @@ def get_listed_stocks(conn: duckdb.DuckDBPyConnection, market: str = None, secto
 def get_stock_detail(conn: duckdb.DuckDBPyConnection, code: str) -> Optional[Dict[str, Any]]:
     """Get listing info for a single stock."""
     row = conn.execute("""
-        SELECT code, name, name_en, market, sector, industry, listing_date, shares_outstanding, market_cap, is_active
+        SELECT code, name, name_en, name_zh, market, sector, industry, listing_date, shares_outstanding, market_cap, is_active
         FROM kr_listed_stocks WHERE code = ?
     """, [code]).fetchone()
     if row is None:
         return None
     return {
-        "code": row[0], "name": row[1], "name_en": row[2], "market": row[3], "sector": row[4],
-        "industry": row[5], "listing_date": str(row[6]) if row[6] else None,
-        "shares_outstanding": row[7], "market_cap": row[8], "is_active": row[9],
+        "code": row[0], "name": row[1], "name_en": row[2], "name_zh": row[3], "market": row[4], "sector": row[5],
+        "industry": row[6], "listing_date": str(row[7]) if row[7] else None,
+        "shares_outstanding": row[8], "market_cap": row[9], "is_active": row[10],
     }
 
 

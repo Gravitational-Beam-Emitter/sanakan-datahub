@@ -1,0 +1,50 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git:*)",
+      "Bash(gh:*)",
+      "Bash(ls:*)",
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(python:*)",
+      "Bash(which:*)",
+      "Bash(echo:*)",
+      "Read",
+      "Glob",
+      "Grep"
+    ],
+    "ask": [
+      "Bash(rm:*)",
+      "Bash(git push:*)",
+      "Bash(git reset:*)",
+      "Bash(drop:*)",
+      "Bash(delete:*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // .tool_response.filePath' | while read -r f; do case \"$f\" in frontend/src/*.ts|frontend/src/*.tsx|frontend/src/*.css|frontend/src/*.js|frontend/src/*.jsx) (cd \"${CLAUDE_PROJECT_DIR}/frontend\" && npx prettier --write \"$f\" 2>/dev/null) || (cd \"${CLAUDE_PROJECT_DIR}\" && npx prettier --write \"$f\" 2>/dev/null) || true ;; esac; done || true",
+            "timeout": 10,
+            "statusMessage": "Formatting frontend files"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cat <<'JSON'\n{\n  \"hookSpecificOutput\": {\n    \"hookEventName\": \"SessionStart\",\n    \"additionalContext\": \"## Project: CIBO Datahub\\n\\nKey directories:\\n- `eco_data_sdk/` — shared SDK for eco data pipeline\\n- `cn_stock/` — China stock data pipeline\\n- `hk_funds/` — Hong Kong funds KYP/DD pipeline\\n- `us_listings/` — US listings data\\n- `us_corp_actions/` — US corporate actions (SEC 8-K)\\n- `announcements/` — company announcements\\n- `mcp/` — MCP server implementations\\n- `frontend/` — Next.js frontend (check AGENTS.md before editing)\\n\\nMCP tools: `eco-data` server with 13 tools for economic data, risk indicators, and name screening.\"\n  }\n}\nJSON",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

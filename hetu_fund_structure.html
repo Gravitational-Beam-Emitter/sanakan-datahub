@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hetu Cayman Fund - 基金结构图（完整版）</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f5f7fa;
+    color: #333;
+    padding: 20px;
+  }
+  .container { max-width: 1200px; margin: 0 auto; }
+  h1 { text-align: center; margin-bottom: 10px; color: #1a365d; }
+  .subtitle { text-align: center; color: #718096; margin-bottom: 24px; font-size: 14px; }
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    padding: 24px;
+    margin-bottom: 24px;
+  }
+  .card h2 { font-size: 16px; color: #2d3748; margin-bottom: 16px; border-bottom: 2px solid #edf2f7; padding-bottom: 8px; }
+  .mermaid { display: flex; justify-content: center; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #edf2f7; vertical-align: top; }
+  th { background: #f7fafc; color: #4a5568; font-weight: 600; width: 200px; }
+  td { color: #2d3748; }
+  .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-right: 4px;
+    margin-bottom: 4px;
+  }
+  .tag-manager { background: #bee3f8; color: #2a4365; }
+  .tag-fund { background: #c6f6d5; color: #22543d; }
+  .tag-agent { background: #fefcbf; color: #744210; }
+  .tag-service { background: #fed7d7; color: #742a2a; }
+  .tag-govern { background: #e9d8fd; color: #44337a; }
+  .tag-hk { background: #ff6b6b; color: #fff; }
+  .tag-cn { background: #f78c6b; color: #fff; }
+  .footnote { font-size: 12px; color: #a0aec0; margin-top: 16px; }
+  .highlight-box {
+    background: #fff5f5;
+    border-left: 4px solid #fc8181;
+    padding: 12px 16px;
+    margin: 16px 0;
+    border-radius: 0 8px 8px 0;
+  }
+  .highlight-box h3 { color: #c53030; margin-bottom: 8px; font-size: 14px; }
+  .highlight-box ul { margin-left: 20px; color: #2d3748; font-size: 14px; }
+  .highlight-box li { margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Hetu Cayman Fund — 基金结构图</h1>
+  <p class="subtitle">
+    数据来源：Investment Management Agreement (2020.8) + Fourth Amended PPM (2025.8) + Sub-IMA<br/>
+    版本：2025年8月（第四版修订备忘录）
+  </p>
+
+  <!-- Mermaid Diagram -->
+  <div class="card">
+    <h2>完整结构关系图</h2>
+    <div class="mermaid">
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ebf4ff', 'primaryTextColor': '#2d3748', 'primaryBorderColor': '#3182ce', 'lineColor': '#718096', 'secondaryColor': '#f0fff4', 'tertiaryColor': '#fffaf0'}}}%%
+graph TB
+    subgraph JURISDICTIONS[" "]
+      direction LR
+      KY["🇰🇾 开曼群岛<br/>Cayman Islands"]
+      BVI["🇻🇬 英属维尔京<br/>BVI"]
+      HK["🇭🇰 香港<br/>Hong Kong"]
+      BM["🇧🇲 百慕大<br/>Bermuda"]
+      CN["🇨🇳 上海<br/>Shanghai"]
+    end
+
+    subgraph CORE["<b>核心结构</b>"]
+      direction TB
+
+      FUND["<b>Hetu Cayman Fund</b><br/>开曼豁免公司 | CIMA注册共同基金<br/>Class A / B / C 参与型股份<br/>2018年5月1日成立"]
+
+      DIRECTORS["<b>基金董事 · Directors</b><br/>🏷️ Qiang WANG<br/>🏷️ Dong XIE<br/>🏷️ Bin ZHANG"]
+
+      IM["<b>投资管理人 · Investment Manager</b><br/><b>Hetu (BVI) Holdings Ltd.</b><br/>BVI商业公司<br/>BVI FSC 核准投资管理人<br/>董事: Xie Dong / Zhang Bin"]
+
+      SUB_MANAGER["<b>🔴 子管理人 · Sub-Manager</b> 🔴<br/><b>Hetu Investment HK Ltd.</b><br/>河图投资香港有限公司<br/>🇭🇰 香港公司 | SFC持牌<br/>Type 9 (资产管理) + Type 4 (证券咨询)<br/>CE编号: BOT794<br/>2023年9月1日起生效<br/>董事: Xie Dong / WANG Qiang / TONG Lin"]
+
+      CUSTODIAN["<b>🔴 托管行 · Custodian</b> 🔴<br/><b>DBS BANK LTD.</b><br/>🇭🇰 香港皇后大道中99号<br/>The Center 18楼"]
+
+      ADMIN["<b>行政管理人 · Administrator</b><br/>Apex Fund Services Ltd.<br/>🇧🇲 百慕大<br/>➕ 授权代表: Apex Investment Consulting<br/>(Shanghai) Co., Ltd."]
+
+      AUDITOR["<b>审计师 · Auditor</b><br/>Rankin Berkower (Cayman) Ltd.<br/>🇰🇾 Grand Cayman"]
+
+      LAWYERS["<b>法律顾问</b><br/>主顾问: AllBright Law Offices 🇨🇳 上海<br/>开曼法律: BGA Law (Cayman) Limited 🇰🇾"]
+
+      REG_AGENT["<b>注册代理人</b><br/>基金: Sertus Incorporations (Cayman) Ltd. 🇰🇾<br/>管理人: Sertus Incorporations (BVI) Ltd. 🇻🇬"]
+    end
+
+    FUND -->|"任命 appoints"| IM
+    FUND -->|"任命 appoints"| ADMIN
+    FUND -->|"任命 appoints"| CUSTODIAN
+    FUND -->|"任命 appoints"| AUDITOR
+    DIRECTORS -->|"总体监督 overall supervision"| IM
+    DIRECTORS -->|"委任"| SUB_MANAGER
+    FUND -->|"受管理"| DIRECTORS
+    IM -->|"转委托 delegates<br/>(Sub-IMA / Clause 11 IMA)"| SUB_MANAGER
+    IM -->|"从管理费中支付报酬"| SUB_MANAGER
+    FUND -->|"注册地址"| REG_AGENT
+    IM -->|"注册地址"| REG_AGENT
+    ADMIN -->|"转委托"| ADMIN
+
+    style FUND fill:#c6f6d5,stroke:#276749,stroke-width:3px
+    style IM fill:#bee3f8,stroke:#2a4365,stroke-width:3px
+    style SUB_MANAGER fill:#ff6b6b,stroke:#c53030,stroke-width:3px,color:#fff
+    style CUSTODIAN fill:#ff6b6b,stroke:#c53030,stroke-width:3px,color:#fff
+    style DIRECTORS fill:#e9d8fd,stroke:#44337a,stroke-width:2px
+    style ADMIN fill:#fed7d7,stroke:#742a2a,stroke-width:2px
+    style AUDITOR fill:#e2e8f0,stroke:#4a5568,stroke-width:1px
+    style LAWYERS fill:#e2e8f0,stroke:#4a5568,stroke-width:1px
+    style REG_AGENT fill:#e2e8f0,stroke:#4a5568,stroke-width:1px
+    </div>
+  </div>
+
+  <!-- Hong Kong Entities Highlight -->
+  <div class="card" style="border: 2px solid #fc8181;">
+    <h2>🔴 香港实体参与情况</h2>
+    <div class="highlight-box">
+      <h3>本次审查发现的香港关联：</h3>
+      <ul>
+        <li><b>子管理人：Hetu Investment HK Ltd.（河图投资香港有限公司）</b>— 香港注册公司，SFC持牌（Type 4 + Type 9），地址：香港铜锣湾云平道28号Lee Garden Two 1583室，负责基金的全权投资决策。</li>
+        <li><b>托管行：DBS BANK LTD. 香港分行</b>— 香港皇后大道中99号The Center 18楼。</li>
+        <li><b>仲裁地：香港国际仲裁中心 (HKIAC)</b>— 按HK仲裁规则，一裁终局。</li>
+        <li><b>交易日：以香港银行营业日为准</b>— Business Day定义参照香港银行营业日。</li>
+        <li><b>申购截止时间：香港时间下午4:00</b>— 所有申购以HK时间为准。</li>
+        <li><b>子管理人董事TONG Lin</b>— 曾在香港Morgan Stanley、Societe Generale工作，专长香港股票市场。</li>
+        <li><b>董事Qiang WANG</b>— 曾在香港Societe Generale Securities HK Ltd.工作。</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Full Participant Table -->
+  <div class="card">
+    <h2>核心参与方汇总（完整版）</h2>
+    <table>
+      <tr><th>角色</th><th>实体名称</th><th>注册地 / 所在地</th><th>标签</th></tr>
+      <tr>
+        <td><b>基金 Fund</b></td>
+        <td>Hetu Cayman Fund</td>
+        <td>开曼群岛 🇰🇾</td>
+        <td><span class="tag tag-fund">基金主体</span></td>
+      </tr>
+      <tr>
+        <td><b>投资管理人</b><br/>Investment Manager</td>
+        <td><b>Hetu (BVI) Holdings Ltd.</b></td>
+        <td>英属维尔京群岛 BVI 🇻🇬</td>
+        <td><span class="tag tag-manager">全权管理人</span></td>
+      </tr>
+      <tr style="background:#fff5f5;">
+        <td><b>子管理人 / 实际操盘方</b><br/>Sub-Manager</td>
+        <td><b>Hetu Investment HK Ltd.</b><br/>河图投资香港有限公司</td>
+        <td><b>香港 🇭🇰</b> 铜锣湾</td>
+        <td><span class="tag tag-hk">SFC持牌</span> <span class="tag tag-manager">投资决策</span></td>
+      </tr>
+      <tr style="background:#fff5f5;">
+        <td><b>托管行</b><br/>Custodian</td>
+        <td><b>DBS BANK LTD.</b></td>
+        <td><b>香港 🇭🇰</b> 中环</td>
+        <td><span class="tag tag-hk">托管</span></td>
+      </tr>
+      <tr>
+        <td><b>行政管理人</b><br/>Administrator</td>
+        <td>Apex Fund Services Ltd.</td>
+        <td>百慕大 🇧🇲</td>
+        <td><span class="tag tag-service">基金行政</span></td>
+      </tr>
+      <tr>
+        <td><b>行政管理人代表</b><br/>Administrator Delegate</td>
+        <td>Apex Investment Consulting (Shanghai) Co., Ltd.</td>
+        <td>上海 🇨🇳</td>
+        <td><span class="tag tag-cn">行政执行</span></td>
+      </tr>
+      <tr>
+        <td><b>审计师</b><br/>Auditor</td>
+        <td>Rankin Berkower (Cayman) Ltd.</td>
+        <td>开曼群岛 🇰🇾</td>
+        <td><span class="tag tag-service">审计</span></td>
+      </tr>
+      <tr>
+        <td><b>主法律顾问</b><br/>Leading Counsel</td>
+        <td>AllBright Law Offices（锦天城）</td>
+        <td>上海 🇨🇳</td>
+        <td><span class="tag tag-cn">法律顾问</span></td>
+      </tr>
+      <tr>
+        <td><b>开曼法律顾问</b></td>
+        <td>BGA Law (Cayman) Limited</td>
+        <td>开曼群岛 🇰🇾</td>
+        <td><span class="tag tag-agent">法律顾问</span></td>
+      </tr>
+      <tr>
+        <td><b>注册代理人（基金）</b></td>
+        <td>Sertus Incorporations (Cayman) Limited</td>
+        <td>开曼群岛 🇰🇾</td>
+        <td><span class="tag tag-agent">注册代理</span></td>
+      </tr>
+      <tr>
+        <td><b>注册代理人（管理人）</b></td>
+        <td>Sertus Incorporations (BVI) Limited</td>
+        <td>英属维尔京群岛 BVI 🇻🇬</td>
+        <td><span class="tag tag-agent">注册代理</span></td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- Directors Table -->
+  <div class="card">
+    <h2>董事与关键人员</h2>
+    <table>
+      <tr><th>姓名</th><th>基金董事</th><th>管理人董事</th><th>子管理人董事/RO</th><th>背景</th></tr>
+      <tr>
+        <td><b>Qiang WANG</b></td>
+        <td>✅</td>
+        <td>—</td>
+        <td>✅</td>
+        <td>8年+投资风控经验，前Societe Generale HK、Yaozhi AM</td>
+      </tr>
+      <tr>
+        <td><b>Dong XIE</b></td>
+        <td>✅</td>
+        <td>✅</td>
+        <td>✅</td>
+        <td>9年+证券交易经验，上海洛书投资总经理</td>
+      </tr>
+      <tr>
+        <td><b>Bin ZHANG</b></td>
+        <td>✅</td>
+        <td>✅</td>
+        <td>—</td>
+        <td>14年+资本管理与融资经验，多家信托公司背景</td>
+      </tr>
+      <tr>
+        <td><b>TONG Lin</b></td>
+        <td>—</td>
+        <td>—</td>
+        <td>✅</td>
+        <td>10年+金融交易经验，前Barclays London、Morgan Stanley HK<br/>专长香港股票市场</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- Fees Section -->
+  <div class="card">
+    <h2>费用结构</h2>
+    <table>
+      <tr><th>费用类型</th><th>费率</th><th>支付对象</th></tr>
+      <tr><td><b>管理费 (Management Fee)</b></td><td>Class A: 0.8%/年 (NAV)<br/>Class B: 0.8%/年 (NAV)<br/>Class C: 0.8%/年 (NAV)</td><td>Hetu (BVI) Holdings Ltd.</td></tr>
+      <tr><td><b>业绩报酬 (Performance Fee)</b></td><td>Class A: 50% 超出高水位<br/>Class B: 80% (超出基准+Hurdle 10%)<br/>Class C: 25% (超出基准+Hurdle 6%)</td><td>Hetu (BVI) Holdings Ltd.</td></tr>
+      <tr><td><b>子管理费</b></td><td>由管理人从自身管理费中支付</td><td>Hetu Investment HK Ltd.</td></tr>
+      <tr><td><b>申购费 (Subscription Fee)</b></td><td>最高 1% 认购金额</td><td>投资管理人或其指定中介</td></tr>
+      <tr><td><b>托管费 / 行政费</b></td><td>以相关协议约定</td><td>DBS Bank / Apex</td></tr>
+    </table>
+  </div>
+
+  <!-- Key Terms -->
+  <div class="card">
+    <h2>关键信息摘要</h2>
+    <table>
+      <tr><th>项目</th><th>内容</th></tr>
+      <tr><td>基金成立日</td><td>2018年5月1日</td></tr>
+      <tr><td>基金类型</td><td>开曼豁免公司，CIMA注册共同基金（Mutual Funds Act Section 4(3)）</td></tr>
+      <tr><td>股份类别</td><td>Class A / Class B / Class C 可赎回无投票权参与型股份</td></tr>
+      <tr><td>最低认购额</td><td>首次 US$100,000 / 追加 US$10,000</td></tr>
+      <tr><td>准据法</td><td>开曼群岛法律</td></tr>
+      <tr><td>争议解决</td><td>🔴 香港国际仲裁中心 (HKIAC)，一名仲裁员，一裁终局</td></tr>
+      <tr><td>交易日</td><td>🔴 以香港银行营业日为准</td></tr>
+      <tr><td>申购时间</td><td>🔴 香港时间下午4:00前</td></tr>
+      <tr><td>IMA签署日</td><td>2020年8月31日</td></tr>
+      <tr><td>Sub-IMA生效日</td><td>2023年9月1日</td></tr>
+      <tr><td>PPM版本</td><td>Fourth Amended and Restated PPM, August 2025</td></tr>
+      <tr><td>子管理人SFC牌照</td><td>Type 4 (证券咨询) + Type 9 (资产管理)，2023年6月30日起生效，仅服务专业投资者</td></tr>
+    </table>
+  </div>
+
+  <p class="footnote">
+    说明：本图基于以下三份文件整理 —— (1) Investment Management Agreement dated 31 August 2020 (Fund↔Hetu BVI);
+    (2) Fourth Amended and Restated Confidential Private Placement Memorandum, August 2025;
+    (3) Sub-Investment Management Agreement (Hetu BVI ↔ Hetu Investment HK).<br/>
+    🔴 红色标注 = 香港实体/香港关联。子管理人是实际投资决策方，托管行DBS HK持有基金资产。
+  </p>
+</div>
+
+<script>
+mermaid.initialize({ startOnLoad: true, securityLevel: 'loose' });
+</script>
+</body>
+</html>

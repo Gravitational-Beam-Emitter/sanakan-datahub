@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KYP Intelligent Due Diligence Platform | Sanakan Datahub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&family=Fira+Code:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/augmented-ui@2/augmented-ui.min.css">
+<style>
+  :root {
+    --void: #000000;
+    --megastructure: #060608;
+    --steel: #0c0e12;
+    --steel2: #111318;
+    --conduit: #1a1d26;
+    --conduit-lit: #252a36;
+    --safeguard: #d8d8d8;
+    --safeguard-dim: #888c94;
+    --datastream: #06b6d4;
+    --datastream-dim: rgba(6,182,212,0.15);
+    --datastream-glow: rgba(6,182,212,0.4);
+    --terminal: #4ade80;
+    --terminal-dim: rgba(74,222,128,0.15);
+    --alert: #ef4444;
+    --alert-dim: rgba(239,68,68,0.12);
+    --amber: #f59e0b;
+    --amber-dim: rgba(245,158,11,0.15);
+    --purple: #a78bfa;
+    --purple-dim: rgba(167,139,250,0.15);
+    --font-display: 'Rajdhani', 'Noto Sans TC', sans-serif;
+    --font-body: 'Noto Sans TC', -apple-system, sans-serif;
+    --font-mono: 'Fira Code', monospace;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--void);
+    color: var(--safeguard);
+    font-family: var(--font-body);
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ═══ SCANLINE OVERLAY ═══ */
+  body::after {
+    content: '';
+    position: fixed; top:0; left:0; width:100%; height:100%;
+    pointer-events: none; z-index: 99999;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.018) 2px,
+      rgba(0,0,0,0.018) 4px
+    );
+  }
+
+  /* ═══ GEOMETRIC GRID BG ═══ */
+  .grid-section {
+    background-image:
+      linear-gradient(rgba(6,182,212,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(6,182,212,0.025) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+
+  .container { max-width:1120px; margin:0 auto; padding:0 28px; }
+
+  /* ═══ AUGMENTED-UI BASE ═══ */
+  .aug-card {
+    --augmented-ui: tl-clip br-clip exe;
+    --aug-tl: 12px; --aug-br: 12px;
+    --aug-border-bg: var(--conduit-lit);
+    --aug-border-all: 1px;
+    background: var(--steel);
+    padding: 28px;
+    position: relative;
+  }
+  .aug-card-cyan {
+    --aug-border-bg: var(--datastream-dim);
+    --aug-border-all: 1px;
+  }
+  .aug-card-alert {
+    --aug-border-bg: var(--alert-dim);
+    --aug-border-all: 1px;
+  }
+
+  /* ═══ HERO ═══ */
+  .hero {
+    background: var(--void);
+    position: relative;
+    padding: 100px 28px 120px;
+    text-align: center;
+    overflow: hidden;
+    border-bottom: 1px solid var(--conduit);
+  }
+  .hero::before {
+    content: '';
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 800px 300px at 50% 20%, rgba(6,182,212,0.06) 0%, transparent 70%),
+      radial-gradient(ellipse 400px 600px at 80% 80%, rgba(6,182,212,0.03) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  /* Geometric line decorations */
+  .hero-geo { position: absolute; pointer-events: none; }
+  .hero-geo-1 { top: 60px; left: -40px; width: 200px; height: 1px; background: linear-gradient(90deg, transparent, var(--datastream-dim), transparent); transform: rotate(-15deg); }
+  .hero-geo-2 { bottom: 80px; right: -20px; width: 160px; height: 1px; background: linear-gradient(90deg, transparent, rgba(6,182,212,0.12), transparent); transform: rotate(20deg); }
+  .hero-geo-3 { top: 140px; right: 60px; width: 1px; height: 100px; background: linear-gradient(0deg, transparent, rgba(6,182,212,0.08), transparent); }
+  .hero-geo-4 { bottom: 40px; left: 25%; width: 300px; height: 1px; background: linear-gradient(90deg, transparent, rgba(6,182,212,0.06), transparent); }
+
+  .hero-title {
+    font-family: var(--font-display);
+    font-size: clamp(2rem, 5vw, 3.4rem);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.15;
+    position: relative;
+    z-index: 1;
+  }
+  .hero-title .line1 { display: block; color: var(--safeguard); }
+  .hero-title .line2 {
+    display: block;
+    background: linear-gradient(135deg, var(--datastream) 0%, #22d3ee 40%, var(--datastream) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: none;
+    filter: drop-shadow(0 0 18px rgba(6,182,212,0.35));
+  }
+  .hero-sub {
+    color: var(--safeguard-dim);
+    font-size: 1.05rem;
+    max-width: 600px;
+    margin: 20px auto 0;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Hero data badges */
+  .hero-badges {
+    display: flex; flex-wrap: wrap; gap: 2px; justify-content: center;
+    margin-top: 40px; position: relative; z-index: 1;
+  }
+  .hero-badge {
+    --augmented-ui: tl-clip br-clip exe;
+    --aug-tl: 8px; --aug-br: 8px;
+    --aug-border-bg: var(--conduit-lit);
+    --aug-border-all: 1px;
+    background: var(--steel);
+    padding: 14px 22px;
+    min-width: 130px;
+  }
+  .hero-badge .val {
+    font-family: var(--font-mono);
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--datastream);
+    text-shadow: 0 0 10px rgba(6,182,212,0.3);
+  }
+  .hero-badge .lbl {
+    font-size: 0.7rem;
+    color: var(--safeguard-dim);
+    letter-spacing: 0.04em;
+    margin-top: 2px;
+  }
+
+  /* ═══ SECTION HEADERS ═══ */
+  section { padding: 90px 0; position: relative; }
+  section.alt { background: var(--megastructure); }
+
+  .sec-tag {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    color: var(--datastream);
+    text-transform: uppercase;
+    display: inline-block;
+    margin-bottom: 10px;
+    text-shadow: 0 0 6px rgba(6,182,212,0.25);
+  }
+  .sec-tag::before { content: '['; color: var(--safeguard-dim); }
+  .sec-tag::after { content: ']'; color: var(--safeguard-dim); }
+
+  h2 {
+    font-family: var(--font-display);
+    font-size: clamp(1.6rem, 3.5vw, 2.2rem);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin-bottom: 14px;
+    color: var(--safeguard);
+  }
+  .sec-intro {
+    color: var(--safeguard-dim);
+    font-size: 1rem;
+    max-width: 700px;
+    margin-bottom: 40px;
+  }
+
+  /* ═══ JAPANESE SECTION MARKER ═══ */
+  .jp-marker {
+    position: absolute;
+    top: 80px;
+    right: 20px;
+    font-family: 'Noto Sans TC', sans-serif;
+    writing-mode: vertical-rl;
+    font-size: 4rem;
+    font-weight: 700;
+    color: rgba(6,182,212,0.04);
+    pointer-events: none;
+    user-select: none;
+    letter-spacing: 0.2em;
+  }
+
+  /* ═══ GRID LAYOUTS ═══ */
+  .grid { display:grid; gap:16px; }
+  .grid-2 { grid-template-columns:repeat(auto-fit,minmax(440px,1fr)); }
+  .grid-3 { grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); }
+  .grid-4 { grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); }
+
+  /* ═══ PAIN POINT CARDS ═══ */
+  .pain-card {
+    --augmented-ui: tr-clip exe;
+    --aug-tr: 16px;
+    --aug-border-bg: var(--alert-dim);
+    --aug-border-all: 1px;
+    background: var(--steel);
+    padding: 26px;
+    border-left: 2px solid var(--alert);
+  }
+  .pain-card h3 { color: var(--alert); font-family: var(--font-display); font-size: 1.15rem; margin-bottom: 8px; }
+  .pain-card p { color: var(--safeguard-dim); font-size: 0.9rem; }
+
+  /* ═══ SOLUTION CARDS ═══ */
+  .sol-card {
+    background: var(--steel);
+    border: 1px solid var(--conduit);
+    padding: 32px 24px;
+    text-align: center;
+    position: relative;
+  }
+  .sol-card .ico { font-size: 2.2rem; margin-bottom: 12px; display:block; }
+  .sol-card h3 {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--datastream);
+    margin-bottom: 8px;
+    text-shadow: 0 0 8px rgba(6,182,212,0.15);
+  }
+  .sol-card p { color: var(--safeguard-dim); font-size: 0.85rem; line-height: 1.6; }
+
+  /* ═══ REGULATORY CARDS ═══ */
+  .reg-card {
+    --augmented-ui: tl-clip br-clip exe;
+    --aug-tl: 12px; --aug-br: 12px;
+    --aug-border-bg: var(--conduit-lit);
+    --aug-border-all: 1px;
+    background: var(--steel);
+    padding: 26px;
+  }
+  .reg-card h3 {
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--datastream);
+    margin-bottom: 6px;
+  }
+  .reg-card .sub { color: var(--safeguard-dim); font-size: 0.82rem; margin-bottom: 12px; }
+  .reg-card ul { list-style:none; }
+  .reg-card li { color: var(--safeguard-dim); font-size: 0.88rem; padding: 3px 0; padding-left: 16px; position:relative; }
+  .reg-card li::before { content:'\25B8'; color: var(--datastream); position:absolute; left:0; font-size:0.7rem; top:5px; }
+
+  /* ═══ STAT TERMINAL ═══ */
+  .stat-term {
+    background: var(--steel);
+    border: 1px solid var(--conduit);
+    padding: 22px 18px;
+    text-align: center;
+  }
+  .stat-term .val {
+    font-family: var(--font-mono);
+    font-size: 2.2rem;
+    font-weight: 600;
+    color: var(--datastream);
+    text-shadow: 0 0 12px rgba(6,182,212,0.25);
+  }
+  .stat-term .val.green { color: var(--terminal); text-shadow: 0 0 12px rgba(74,222,128,0.25); }
+  .stat-term .lbl {
+    font-size: 0.78rem;
+    color: var(--safeguard-dim);
+    margin-top: 4px;
+    letter-spacing: 0.03em;
+  }
+
+  /* ═══ TABLE TERMINAL ═══ */
+  table {
+    width:100%; border-collapse:collapse; font-size:0.88rem;
+    font-family: var(--font-body);
+  }
+  th {
+    text-align:left; padding:10px 14px;
+    background: var(--steel2);
+    font-family: var(--font-display);
+    font-weight:600; font-size:0.82rem;
+    color: var(--datastream);
+    letter-spacing: 0.05em;
+    border-bottom: 2px solid var(--conduit-lit);
+    text-transform: uppercase;
+  }
+  td { padding:10px 14px; border-bottom:1px solid var(--conduit); color: var(--safeguard-dim); }
+  tr:hover td { background: rgba(6,182,212,0.02); }
+
+  .tag {
+    display:inline-block; padding:2px 10px; font-size:0.7rem;
+    font-family: var(--font-mono); font-weight:500;
+    letter-spacing:0.04em;
+  }
+  .tag-g { background:var(--terminal-dim); color:var(--terminal); }
+  .tag-b { background:var(--datastream-dim); color:var(--datastream); }
+  .tag-a { background:var(--amber-dim); color:var(--amber); }
+  .tag-r { background:var(--alert-dim); color:var(--alert); }
+
+  /* ═══ FACTOR BAR ═══ */
+  .factor-list { margin:20px 0; }
+  .factor-row {
+    display:flex; align-items:center; gap:14px;
+    padding:8px 0; border-bottom:1px solid var(--conduit);
+  }
+  .factor-row:last-child { border-bottom:none; }
+  .factor-name { width:160px; font-size:0.85rem; flex-shrink:0; color: var(--safeguard-dim); }
+  .factor-w { width:50px; text-align:right; font-family: var(--font-mono); font-size:0.78rem; color: var(--safeguard-dim); flex-shrink:0; }
+  .factor-bar-wrap { flex:1; height:18px; background: var(--conduit); position:relative; overflow:hidden; }
+  .factor-bar {
+    height:100%;
+    background: linear-gradient(90deg, var(--datastream), #22d3ee);
+    display:flex; align-items:center; justify-content:flex-end;
+    padding-right:8px;
+    font-family: var(--font-mono); font-size:0.68rem; font-weight:600;
+    color: var(--void);
+    min-width:44px;
+  }
+  .factor-ent { width:56px; text-align:right; font-family: var(--font-mono); font-size:0.78rem; color: var(--terminal); flex-shrink:0; }
+
+  /* ═══ PIPELINE FLOW ═══ */
+  .flow {
+    display:flex; flex-wrap:wrap; gap:6px; align-items:center;
+    margin:24px 0; padding:20px 24px;
+    background: var(--steel); border: 1px solid var(--conduit);
+    overflow-x:auto;
+  }
+  .flow-node {
+    --augmented-ui: tl-clip br-clip exe;
+    --aug-tl: 6px; --aug-br: 6px;
+    --aug-border-bg: var(--conduit-lit);
+    --aug-border-all: 1px;
+    background: var(--steel2);
+    padding:8px 14px; font-size:0.78rem; white-space:nowrap;
+    font-family: var(--font-mono); color: var(--datastream);
+  }
+  .flow-arrow { color: var(--safeguard-dim); font-weight:700; }
+
+  /* ═══ WORKFLOW COMPARISON ═══ */
+  .old-workflow {
+    --augmented-ui: tl-clip exe;
+    --aug-tl: 16px;
+    --aug-border-bg: var(--alert-dim);
+    --aug-border-all: 1px;
+    background: var(--steel);
+    border-left: 2px solid var(--alert);
+    padding: 28px;
+    opacity: 0.85;
+  }
+  .new-workflow {
+    --augmented-ui: br-clip exe;
+    --aug-br: 16px;
+    --aug-border-bg: var(--datastream-dim);
+    --aug-border-all: 1px;
+    background: var(--steel);
+    border-left: 2px solid var(--datastream);
+    padding: 28px;
+    box-shadow: 0 0 20px rgba(6,182,212,0.05);
+  }
+  .old-workflow h3 { font-family: var(--font-display); color: var(--alert); margin-bottom: 16px; }
+  .new-workflow h3 { font-family: var(--font-display); color: var(--datastream); margin-bottom: 16px; text-shadow: 0 0 10px rgba(6,182,212,0.2); }
+
+  .wf-step { display:flex; gap:12px; margin:10px 0; align-items:baseline; }
+  .wf-step .idx { font-family:var(--font-mono); font-size:0.78rem; color:var(--safeguard-dim); min-width:22px; }
+  .wf-step .desc { font-size:0.88rem; color:var(--safeguard-dim); }
+  .wf-step .desc small { color: var(--safeguard-dim); opacity:0.6; display:block; font-size:0.75rem; margin-top:2px; }
+  .wf-total { margin-top:14px; font-family:var(--font-display); font-size:1rem; font-weight:600; }
+
+  /* ═══ PRICING ═══ */
+  .price-card {
+    --augmented-ui: tl-clip br-clip exe;
+    --aug-tl: 14px; --aug-br: 14px;
+    --aug-border-bg: var(--conduit-lit);
+    --aug-border-all: 1px;
+    background: var(--steel);
+    padding: 36px 32px;
+    text-align: center;
+    position: relative;
+  }
+  .price-card.featured {
+    --aug-border-bg: var(--datastream);
+    --aug-border-all: 1px;
+    box-shadow: 0 0 30px rgba(6,182,212,0.08);
+  }
+  .price-rec {
+    position:absolute; top:-16px; left:50%; transform:translateX(-50%);
+    background: var(--datastream); color: var(--void);
+    padding:4px 18px;
+    font-family: var(--font-mono); font-size:0.7rem; font-weight:600;
+    letter-spacing: 0.06em;
+    --augmented-ui: tl-clip br-clip exe;
+    --aug-tl: 5px; --aug-br: 5px;
+  }
+  .price-card h3 {
+    font-family: var(--font-display);
+    font-size: 1.3rem; font-weight: 600;
+  }
+  .price-card .amt {
+    font-family: var(--font-mono);
+    font-size: 2.2rem; font-weight: 600;
+    color: var(--datastream);
+    margin: 14px 0 4px;
+    text-shadow: 0 0 12px rgba(6,182,212,0.2);
+  }
+  .price-card .unit { color:var(--safeguard-dim); font-size:0.82rem; margin-bottom:20px; }
+  .price-card ul { text-align:left; list-style:none; margin:0 0 24px; }
+  .price-card li { padding:5px 0; color:var(--safeguard-dim); font-size:0.85rem; }
+  .price-card li::before { content:'\2713'; color:var(--terminal); font-weight:700; margin-right:8px; }
+
+  /* ═══ BUTTONS ═══ */
+  .btn {
+    display:inline-block; padding:12px 32px;
+    font-family: var(--font-display); font-size:0.9rem; font-weight:600;
+    letter-spacing: 0.04em; text-decoration:none; cursor:pointer;
+    transition: all 0.2s;
+    --augmented-ui: tl-clip br-clip exe;
+    --aug-tl: 8px; --aug-br: 8px;
+  }
+  .btn-primary {
+    --aug-border-bg: var(--datastream);
+    --aug-border-all: 1px;
+    background: rgba(6,182,212,0.1);
+    color: var(--datastream);
+  }
+  .btn-primary:hover {
+    background: rgba(6,182,212,0.2);
+    box-shadow: 0 0 20px rgba(6,182,212,0.2);
+  }
+  .btn-ghost {
+    --aug-border-bg: var(--conduit-lit);
+    --aug-border-all: 1px;
+    background: transparent;
+    color: var(--safeguard);
+  }
+  .btn-ghost:hover { background: rgba(255,255,255,0.03); }
+
+  /* ═══ FAQ ═══ */
+  details {
+    margin:10px 0;
+    border: 1px solid var(--conduit);
+    background: var(--steel);
+  }
+  details summary {
+    cursor:pointer; font-weight:500; font-size:0.95rem;
+    padding:14px 18px;
+    color: var(--safeguard);
+    list-style:none;
+    display:flex; align-items:center; gap:10px;
+  }
+  details summary::-webkit-details-marker { display:none; }
+  details summary::before {
+    content:'[+]'; font-family:var(--font-mono); font-size:0.78rem;
+    color: var(--datastream); min-width:30px;
+  }
+  details[open] summary::before { content:'[-]'; }
+  details .content { padding:0 18px 18px; }
+  details .content p { color: var(--safeguard-dim); font-size:0.88rem; }
+
+  /* ═══ I/O SECTION DIVIDER ═══ */
+  .io-divider {
+    height: 2px; margin: 0;
+    border: none;
+    background: linear-gradient(90deg, transparent, var(--conduit-lit), transparent);
+    position: relative;
+  }
+  .io-divider::after {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 8px; height: 8px;
+    background: var(--datastream);
+    box-shadow: 0 0 10px rgba(6,182,212,0.4);
+    --augmented-ui: tl-clip br-clip exe;
+    --aug-tl: 2px; --aug-br: 2px;
+  }
+
+  /* ═══ FOOTER ═══ */
+  .footer {
+    background: var(--void);
+    border-top: 1px solid var(--conduit);
+    text-align: center;
+    padding: 48px 24px;
+    position: relative;
+  }
+  .footer .brand {
+    font-family: var(--font-display);
+    font-size: 1.2rem; font-weight: 700;
+    color: var(--safeguard);
+    letter-spacing: 0.06em;
+  }
+  .footer .brand span { color: var(--datastream); }
+  .footer p { color: var(--safeguard-dim); font-size:0.82rem; margin-top:8px; }
+  .footer .easter-egg {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: rgba(6,182,212,0.12);
+    margin-top: 20px;
+    letter-spacing: 0.12em;
+  }
+
+  /* ═══ RESPONSIVE ═══ */
+  @media (max-width:768px) {
+    .grid-2 { grid-template-columns:1fr; }
+    .hero { padding: 60px 20px 80px; }
+    .hero-badge { min-width:100px; padding:10px 14px; }
+    .hero-badge .val { font-size:1.2rem; }
+    .jp-marker { display:none; }
+    .factor-name { width:120px; font-size:0.75rem; }
+  }
+
+  /* ═══ TERMINAL CURSOR ═══ */
+  @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0; } }
+  .cursor { display:inline-block; animation:blink 1.2s step-end infinite; color:var(--datastream); }
+
+  /* ═══ GLITCH HOVER ═══ */
+  @keyframes glitch {
+    0% { text-shadow: 2px 0 var(--alert), -1px 0 var(--datastream); }
+    25% { text-shadow: -1px 0 var(--alert), 2px 0 var(--datastream); }
+    50% { text-shadow: 1px 0 var(--datastream), -2px 0 var(--alert); }
+    100% { text-shadow: -2px 0 var(--datastream), 1px 0 var(--alert); }
+  }
+  .glitch-hover:hover { animation: glitch 0.3s ease-in-out; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════ HERO ═══════════ -->
+<div class="hero">
+  <div class="hero-geo hero-geo-1"></div>
+  <div class="hero-geo hero-geo-2"></div>
+  <div class="hero-geo hero-geo-3"></div>
+  <div class="hero-geo hero-geo-4"></div>
+
+  <h1 class="hero-title">
+    <span class="line1">KYP Intelligent Due Diligence</span>
+    <span class="line2">香港基金尽调 · 全自動化</span>
+  </h1>
+  <p class="hero-sub">SFC-authorized fund database · 18-factor Manager DD · 10-dimension KYP engine · 50+ data connectors · Powered by Sanakan Datahub</p>
+
+  <div class="hero-badges">
+    <div class="hero-badge"><div class="val">2,021</div><div class="lbl">SFC Authorized Funds</div></div>
+    <div class="hero-badge"><div class="val">2,478</div><div class="lbl">Type 9 Managers Rated</div></div>
+    <div class="hero-badge"><div class="val">444K</div><div class="lbl">NAV Data Points</div></div>
+    <div class="hero-badge"><div class="val">2,231</div><div class="lbl">Private OFCs</div></div>
+    <div class="hero-badge"><div class="val">18</div><div class="lbl">Rating Factors</div></div>
+    <div class="hero-badge"><div class="val">50+</div><div class="lbl">Data Connectors</div></div>
+  </div>
+</div>
+
+<hr class="io-divider">
+
+<!-- ═══════════ PROBLEM ═══════════ -->
+<section class="grid-section">
+  <div class="container">
+    <span class="sec-tag">pain_points</span>
+    <h2>KYP Compliance &mdash; The Bottleneck</h2>
+    <p class="sec-intro">SFC Code of Conduct &sect;5.1A / &sect;5.5 mandate rigorous product due diligence. Traditional manual KYP workflows fail to scale.</p>
+
+    <div class="grid grid-2">
+      <div class="pain-card">
+        <h3>SYS.ERR: Data Fragmentation</h3>
+        <p>Fund documents scattered across 50+ manager websites, SFC registers, exchange bulletins. Manual collection takes <strong>2&ndash;4 hours per fund</strong>. Covering a full product shelf requires months of analyst time.</p>
+      </div>
+      <div class="pain-card">
+        <h3>SYS.ERR: Rating Inconsistency</h3>
+        <p>Different RMs produce different conclusions for the same manager. No standardized scoring framework. <strong>Compliance audit trails are non-existent</strong> and difficult to defend during SFC inspections.</p>
+      </div>
+      <div class="pain-card">
+        <h3>SYS.ERR: Monitoring Blind Spots</h3>
+        <p>KYP is not one-shot. NAV changes, manager violations, fund document updates require continuous monitoring. Manual tracking <strong>misses critical events</strong>, triggering regulatory exposure.</p>
+      </div>
+      <div class="pain-card">
+        <h3>SYS.ERR: Complex Product Classification</h3>
+        <p>&sect;5.5 lists 14 complex product types. &sect;5.1A identifies 71 derivative funds. Manual classification of each fund is <strong>error-prone</strong> and operationally inefficient.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ SOLUTION ═══════════ -->
+<section class="alt">
+  <div class="container" style="position:relative;">
+    <div class="jp-marker">自動化</div>
+    <span class="sec-tag">solution</span>
+    <h2>Automated KYP Engine &mdash; Full Pipeline</h2>
+    <p class="sec-intro">One platform covering the complete KYP workflow: automated data collection, 10-dimension scoring, 18-factor manager rating, real-time regulatory tracking.</p>
+
+    <div class="grid grid-4" style="margin-top:36px;">
+      <div class="sol-card">
+        <span class="ico">&#9654;</span>
+        <h3>Auto Collection</h3>
+        <p>50+ manager website scrapers. Daily NAV sync. SFC enforcement tracking. ISIN-to-NAV backfill pipeline.</p>
+      </div>
+      <div class="sol-card">
+        <span class="ico">&#9670;</span>
+        <h3>10-Dim KYP</h3>
+        <p>Product nature. Counterparty. Custody. Valuation. Liquidity. Conflicts. Disclosure. Monitoring. Compliance. Audit.</p>
+      </div>
+      <div class="sol-card">
+        <span class="ico">&#9644;</span>
+        <h3>18-Factor Rating</h3>
+        <p>Broker 18I Manager DD template. Five-tier F1&ndash;F5 scores. All factors >0.5 entropy. Customizable weights.</p>
+      </div>
+      <div class="sol-card">
+        <span class="ico">&#9632;</span>
+        <h3>One-Click Reports</h3>
+        <p>Manager DD reports. Fund risk ratings. Complex product classification. Full audit trail with scoring provenance.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="io-divider">
+
+<!-- ═══════════ REGULATORY ═══════════ -->
+<section class="grid-section">
+  <div class="container" style="position:relative;">
+    <div class="jp-marker">規制</div>
+    <span class="sec-tag">regulatory_alignment</span>
+    <h2>Aligned With SFC Regulatory Framework</h2>
+    <p class="sec-intro">Our KYP framework is built against the latest SFC guidelines. Every scoring dimension maps to specific regulatory expectations.</p>
+
+    <div class="grid grid-2">
+      <div class="reg-card">
+        <h3>SFC Code of Conduct &sect;5.1A</h3>
+        <div class="sub">Derivative Product Identification and Enhanced DD</div>
+        <ul>
+          <li>Auto-detect funds with NDE &gt; 50%</li>
+          <li>Cover all 71 SFC-identified derivative funds</li>
+          <li>Structured products, synthetic ETFs, L&amp;I classification</li>
+          <li>Per-product complex product determination</li>
+        </ul>
+      </div>
+      <div class="reg-card">
+        <h3>SFC Code of Conduct &sect;5.5</h3>
+        <div class="sub">Complex Product Additional Requirements</div>
+        <ul>
+          <li>14 complex product categories auto-classified</li>
+          <li>Per-product risk flags and compliance alerts</li>
+          <li>Additional disclosure requirement prompts</li>
+        </ul>
+      </div>
+      <div class="reg-card">
+        <h3>SFC Product DD Guidelines</h3>
+        <div class="sub">Product Due Diligence Framework</div>
+        <ul>
+          <li>10-dimension KYP assessment covering product nature, counterparty, custody, valuation, liquidity, conflicts, disclosure, monitoring, compliance, and audit</li>
+          <li>Independent scoring per dimension with findings log</li>
+        </ul>
+      </div>
+      <div class="reg-card">
+        <h3>SFC Manager DD Expectations</h3>
+        <div class="sub">Fund Manager Due Diligence Standards</div>
+        <ul>
+          <li>18-factor Broker DD template covering AUM, compliance, risk controls, and reputation</li>
+          <li>5-tier Internal Control score from Strong to Lacking</li>
+          <li>Covering all 2,478 Type 9 licensed corporations</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ DATA COVERAGE ═══════════ -->
+<section class="alt">
+  <div class="container" style="position:relative;">
+    <div class="jp-marker">全覽</div>
+    <span class="sec-tag">system_scan</span>
+    <h2>Panoramic Hong Kong Fund Data Coverage</h2>
+    <p class="sec-intro">From public authorized funds to private OFCs, from manager licensing to enforcement history. One platform, complete coverage.</p>
+
+    <div class="grid grid-4" style="margin-top:36px;">
+      <div class="stat-term"><div class="val">2,021</div><div class="lbl">Active SFC-Authorized Funds</div></div>
+      <div class="stat-term"><div class="val green">2,231</div><div class="lbl">Private OFC Sub-Funds</div></div>
+      <div class="stat-term"><div class="val">2,478</div><div class="lbl">Type 9 Licensed Managers</div></div>
+      <div class="stat-term"><div class="val green">692</div><div class="lbl">Funds With ISIN Codes</div></div>
+      <div class="stat-term"><div class="val">548</div><div class="lbl">Funds With NAV History</div></div>
+      <div class="stat-term"><div class="val green">444K</div><div class="lbl">NAV Observations</div></div>
+    </div>
+
+    <div class="grid grid-3" style="margin-top:20px;">
+      <div class="aug-card aug-card-cyan">
+        <h3 style="font-family:var(--font-display);color:var(--datastream);margin-bottom:14px;">Fund Universe</h3>
+        <table>
+          <tr><td>SFC Authorized</td><td style="text-align:right;font-family:var(--font-mono);font-weight:600;color:var(--datastream);">2,021</td></tr>
+          <tr><td>Complex (&sect;5.5)</td><td style="text-align:right;font-family:var(--font-mono);font-weight:600;color:var(--amber);">8</td></tr>
+          <tr><td>Derivative (&sect;5.1A)</td><td style="text-align:right;font-family:var(--font-mono);font-weight:600;color:var(--amber);">70</td></tr>
+          <tr><td>Public OFCs</td><td style="text-align:right;font-family:var(--font-mono);font-weight:600;color:var(--datastream);">154</td></tr>
+          <tr><td>Private OFCs</td><td style="text-align:right;font-family:var(--font-mono);font-weight:600;color:var(--datastream);">2,231</td></tr>
+        </table>
+      </div>
+      <div class="aug-card aug-card-cyan">
+        <h3 style="font-family:var(--font-display);color:var(--datastream);margin-bottom:14px;">Risk Distribution</h3>
+        <table>
+          <tr><td><span class="tag tag-g">Medium-Low</span></td><td style="text-align:right;font-family:var(--font-mono);font-weight:600;color:var(--terminal);">1,987</td></tr>
+          <tr><td><span class="tag tag-a">Medium</span></td><td style="text-align:right;font-family:var(--font-mono);font-weight:600;color:var(--amber);">34</td></tr>
+        </table>
+        <p style="margin-top:14px;font-size:0.75rem;color:var(--safeguard-dim);">100% of SFC-authorized funds rated</p>
+      </div>
+      <div class="aug-card aug-card-cyan">
+        <h3 style="font-family:var(--font-display);color:var(--datastream);margin-bottom:14px;">Manager DD Distribution</h3>
+        <table>
+          <tr><td>F1 &middot; Excellent</td><td style="text-align:right;font-family:var(--font-mono);color:var(--terminal);">0.2%</td><td><span class="tag tag-g">Low Risk</span></td></tr>
+          <tr><td>F2 &middot; Good</td><td style="text-align:right;font-family:var(--font-mono);color:var(--datastream);">6.9%</td><td><span class="tag tag-b">Low-Med</span></td></tr>
+          <tr><td>F3 &middot; Moderate</td><td style="text-align:right;font-family:var(--font-mono);color:var(--amber);">54.5%</td><td><span class="tag tag-a">Medium</span></td></tr>
+          <tr><td>F4 &middot; Caution</td><td style="text-align:right;font-family:var(--font-mono);color:var(--amber);">28.3%</td><td><span class="tag tag-a">Elevated</span></td></tr>
+          <tr><td>F5 &middot; High Risk</td><td style="text-align:right;font-family:var(--font-mono);color:var(--alert);">10.1%</td><td><span class="tag tag-r">High Risk</span></td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="io-divider">
+
+<!-- ═══════════ RATING ENGINE ═══════════ -->
+<section class="grid-section">
+  <div class="container" style="position:relative;">
+    <div class="jp-marker">評価</div>
+    <span class="sec-tag">rating_engine</span>
+    <h2>18-Factor Manager DD &mdash; Broker 18I Template</h2>
+    <p class="sec-intro">All 18 factors achieve entropy &gt;0.5. Every factor meaningfully differentiates manager quality. Fully transparent, fully auditable scoring logic.</p>
+
+    <div class="aug-card aug-card-cyan" style="margin-top:24px;">
+      <div class="factor-list">
+        <div class="factor-row" style="border-bottom:2px solid var(--conduit-lit);">
+          <span class="factor-name" style="color:var(--datastream);font-weight:600;">Factor</span>
+          <span class="factor-w" style="color:var(--datastream);font-weight:600;">Weight</span>
+          <div class="factor-bar-wrap" style="background:transparent;"></div>
+          <span class="factor-ent" style="color:var(--datastream);font-weight:600;">Entropy</span>
+        </div>
+        <div class="factor-row">
+          <span class="factor-name">Management Scale</span><span class="factor-w">0.12</span>
+          <div class="factor-bar-wrap"><div class="factor-bar" style="width:67%;">0.670</div></div>
+          <span class="factor-ent">0.670</span>
+        </div>
+        <div class="factor-row">
+          <span class="factor-name">Institutional Reputation</span><span class="factor-w">0.08</span>
+          <div class="factor-bar-wrap"><div class="factor-bar" style="width:85%;">0.845</div></div>
+          <span class="factor-ent">0.845</span>
+        </div>
+        <div class="factor-row">
+          <span class="factor-name">Distribution Channels</span><span class="factor-w">0.07</span>
+          <div class="factor-bar-wrap"><div class="factor-bar" style="width:83%;">0.825</div></div>
+          <span class="factor-ent">0.825</span>
+        </div>
+        <div class="factor-row">
+          <span class="factor-name">Investor Composition</span><span class="factor-w">0.03</span>
+          <div class="factor-bar-wrap"><div class="factor-bar" style="width:82%;">0.824</div></div>
+          <span class="factor-ent">0.824</span>
+        </div>
+        <div class="factor-row">
+          <span class="factor-name">Risk Control System</span><span class="factor-w">0.08</span>
+          <div class="factor-bar-wrap"><div class="factor-bar" style="width:72%;">0.721</div></div>
+          <span class="factor-ent">0.721</span>
+        </div>
+        <div class="factor-row">
+          <span class="factor-name">Regulatory Penalties</span><span class="factor-w">0.08</span>
+          <div class="factor-bar-wrap"><div class="factor-bar" style="width:56%;">0.555</div></div>
+          <span class="factor-ent">0.555</span>
+        </div>
+        <div class="factor-row">
+          <span class="factor-name">Scale Growth</span><span class="factor-w">0.05</span>
+          <div class="factor-bar-wrap"><div class="factor-bar" style="width:53%;">0.525</div></div>
+          <span class="factor-ent">0.525</span>
+        </div>
+        <div class="factor-row" style="color:var(--safeguard-dim);">
+          <span class="factor-name" style="font-weight:400;">+ 10 additional factors</span><span class="factor-w">0.49</span>
+          <div class="factor-bar-wrap" style="background:transparent;"></div>
+          <span class="factor-ent" style="color:var(--terminal);">all &ge; 0.5</span>
+        </div>
+      </div>
+    </div>
+
+    <p style="margin-top:18px;font-size:0.8rem;color:var(--safeguard-dim);font-family:var(--font-mono);">
+      # Normalized Shannon Entropy (0&ndash;1) measures score differentiation. Below 0.3 = useless factor. All 18 factors above 0.5 = maximum discrimination power.
+    </p>
+  </div>
+</section>
+
+<!-- ═══════════ 10D KYP ═══════════ -->
+<section class="alt">
+  <div class="container" style="position:relative;">
+    <div class="jp-marker">尽调</div>
+    <span class="sec-tag">kyp_framework</span>
+    <h2>10-Dimension KYP Assessment Matrix</h2>
+    <p class="sec-intro">Aligned with international fund DD best practices. From product structure to ongoing monitoring. Every dimension scored and documented.</p>
+
+    <div class="aug-card aug-card-cyan" style="margin-top:24px;">
+      <table>
+        <tr><th>#</th><th>Dimension</th><th>Assessment Scope</th><th>Status</th></tr>
+        <tr><td style="font-family:var(--font-mono);color:var(--datastream);">01</td><td><strong>Product Nature</strong></td><td>Fund structure, investment strategy, asset class, leverage, complex product classification</td><td><span class="tag tag-g">SCORED</span></td></tr>
+        <tr><td style="font-family:var(--font-mono);color:var(--datastream);">02</td><td><strong>Counterparty Risk</strong></td><td>Swap counterparties, securities lending, collateral management, concentration risk</td><td><span class="tag tag-g">SCORED</span></td></tr>
+        <tr><td style="font-family:var(--font-mono);color:var(--datastream);">03</td><td><strong>Custody</strong></td><td>Custodian qualification, asset segregation, custodian oversight mechanism</td><td><span class="tag tag-g">SCORED</span></td></tr>
+        <tr><td style="font-family:var(--font-mono);color:var(--datastream);">04</td><td><strong>Valuation</strong></td><td>Pricing sources, fair value hierarchy, valuation frequency, independent verification</td><td><span class="tag tag-g">SCORED</span></td></tr>
+        <tr><td style="font-family:var(--font-mono);color:var(--datastream);">05</td><td><strong>Liquidity</strong></td><td>Redemption frequency, notice periods, swing pricing, gating provisions</td><td><span class="tag tag-g">SCORED</span></td></tr>
+        <tr><td style="font-family:var(--font-mono);color:var(--datastream);">06</td><td><strong>Conflict of Interest</strong></td><td>Related party transactions, soft commission arrangements, personal trading policies</td><td><span class="tag tag-g">SCORED</span></td></tr>
+        <tr><td style="font-family:var(--font-mono);color:var(--datastream);">07</td><td><strong>Disclosure</strong></td><td>KFS completeness, annual report timeliness, fee transparency and adequacy</td><td><span class="tag tag-g">SCORED</span></td></tr>
+        <tr><td style="font-family:var(--font-mono);color:var(--datastream);">08</td><td><strong>Ongoing Monitoring</strong></td><td>Trigger-based review mechanism, manager change notification, material event reporting</td><td><span class="tag tag-g">SCORED</span></td></tr>
+        <tr><td style="font-family:var(--font-mono);color:var(--datastream);">09</td><td><strong>Compliance</strong></td><td>SFC enforcement history, disciplinary actions, violation count and severity</td><td><span class="tag tag-g">SCORED</span></td></tr>
+        <tr><td style="font-family:var(--font-mono);color:var(--datastream);">10</td><td><strong>Audit</strong></td><td>Auditor qualification, audit opinion type, audit report timeliness</td><td><span class="tag tag-g">SCORED</span></td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<hr class="io-divider">
+
+<!-- ═══════════ DATA PIPELINE ═══════════ -->
+<section class="grid-section">
+  <div class="container" style="position:relative;">
+    <div class="jp-marker">集積</div>
+    <span class="sec-tag">data_engine</span>
+    <h2>14 Automated Data Pipelines &mdash; Daily Refresh</h2>
+    <p class="sec-intro">From source ingestion to scoring output. Zero manual intervention required.</p>
+
+    <div class="flow">
+      <span class="flow-node">SFC Public Register</span>
+      <span class="flow-arrow">&#9654;</span>
+      <span class="flow-node">50+ Manager Sites</span>
+      <span class="flow-arrow">&#9654;</span>
+      <span class="flow-node">SFC Enforcement</span>
+      <span class="flow-arrow">&#9654;</span>
+      <span class="flow-node">Webb-Site</span>
+      <span class="flow-arrow">&#9654;</span>
+      <span class="flow-node">Wikipedia</span>
+      <span class="flow-arrow">&#9654;</span>
+      <span class="flow-node">HKEX</span>
+      <span class="flow-arrow">&#9654;</span>
+      <span class="flow-node">Yahoo Finance</span>
+      <span class="flow-arrow">&#9654;</span>
+      <span class="flow-node">WINGS</span>
+    </div>
+
+    <div class="grid grid-2" style="margin-top:24px;">
+      <div class="aug-card aug-card-cyan">
+        <h3 style="font-family:var(--font-display);color:var(--datastream);margin-bottom:12px;">Fund Data Pipelines</h3>
+        <ul style="list-style:none;font-size:0.85rem;color:var(--safeguard-dim);">
+          <li style="padding:4px 0;">&#9656; Fund List Ingestion from SFC register to structured DB</li>
+          <li style="padding:4px 0;">&#9656; KFS Parser auto-extracting fees, strategy, risk data</li>
+          <li style="padding:4px 0;">&#9656; NAV Backfill from Yahoo Finance ISIN to 444K observations</li>
+          <li style="padding:4px 0;">&#9656; Performance Compute: YTD/1M/3M/6M/1Y/3Y/5Y from NAV</li>
+          <li style="padding:4px 0;">&#9656; ISIN Management with multi-source cross-validation</li>
+          <li style="padding:4px 0;">&#9656; Share Classes by currency, hedging, distribution types</li>
+          <li style="padding:4px 0;">&#9656; Dividend History with ex-date, pay-date, amount, type</li>
+        </ul>
+      </div>
+      <div class="aug-card aug-card-cyan">
+        <h3 style="font-family:var(--font-display);color:var(--datastream);margin-bottom:12px;">Manager Data Pipelines</h3>
+        <ul style="list-style:none;font-size:0.85rem;color:var(--safeguard-dim);">
+          <li style="padding:4px 0;">&#9656; Manager Ingestion from SFC license register to 8,000+ corps</li>
+          <li style="padding:4px 0;">&#9656; 50+ Site Scrapers: BlackRock, JPMorgan, HSBC, Value Partners...</li>
+          <li style="padding:4px 0;">&#9656; AUM Estimation via license combo, wiki, establishment years</li>
+          <li style="padding:4px 0;">&#9656; Webb-Site Enrichment: incorporation date, name changes, websites</li>
+          <li style="padding:4px 0;">&#9656; Wikipedia Enrichment for EN/ZH reputation signals</li>
+          <li style="padding:4px 0;">&#9656; Enforcement via SFC API for disciplinary actions, fines, revocations</li>
+          <li style="padding:4px 0;">&#9656; WINGS Probe for overall license status overview</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ WORKFLOW ═══════════ -->
+<section class="alt">
+  <div class="container" style="position:relative;">
+    <div class="jp-marker">効率</div>
+    <span class="sec-tag">efficiency</span>
+    <h2>KYP Workflow: From 3.5 Hours to 5 Minutes</h2>
+    <p class="sec-intro">Traditional manual KYP versus platform-automated KYP. A 40x efficiency gain.</p>
+
+    <div class="grid grid-2" style="margin-top:28px;">
+      <div class="old-workflow">
+        <h3>[ LEGACY ] Manual KYP</h3>
+        <div class="wf-step"><span class="idx">01.</span><span class="desc">Locate fund documents<small>KFS, prospectus, annual reports scattered across sources</small></span></div>
+        <div class="wf-step"><span class="idx">02.</span><span class="desc">Extract key data points<small>Fees, strategy, risk level manually entered</small></span></div>
+        <div class="wf-step"><span class="idx">03.</span><span class="desc">Manager background check<small>SFC license lookup, enforcement search, AUM research</small></span></div>
+        <div class="wf-step"><span class="idx">04.</span><span class="desc">Write DD report<small>Manually compile ratings and justifications</small></span></div>
+        <div class="wf-step"><span class="idx">05.</span><span class="desc">Compliance review<small>Cross-check data accuracy</small></span></div>
+        <p class="wf-total" style="color:var(--alert);">Total: ~3.5 hours / fund</p>
+      </div>
+
+      <div class="new-workflow">
+        <h3>[ SANAKAN ] Automated KYP</h3>
+        <div class="wf-step"><span class="idx">01.</span><span class="desc">Search fund name or ISIN<small>Full-text search, instant return</small></span></div>
+        <div class="wf-step"><span class="idx">02.</span><span class="desc">Structured data presented<small>KFS parsed, fees and strategy pre-structured</small></span></div>
+        <div class="wf-step"><span class="idx">03.</span><span class="desc">18-factor rating + enforcement<small>Auto-computed, refreshed daily</small></span></div>
+        <div class="wf-step"><span class="idx">04.</span><span class="desc">Generate DD report<small>One-click export with scoring provenance</small></span></div>
+        <div class="wf-step"><span class="idx">05.</span><span class="desc">System-verified + audit trail<small>Data sources and scoring logic fully transparent</small></span></div>
+        <p class="wf-total" style="color:var(--terminal);">Total: ~5 minutes / fund &nbsp; <span style="color:var(--datastream);">40x faster</span></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="io-divider">
+
+<!-- ═══════════ INTEGRATION ═══════════ -->
+<section class="grid-section">
+  <div class="container" style="position:relative;">
+    <div class="jp-marker">接続</div>
+    <span class="sec-tag">integration</span>
+    <h2>Multiple Access Modes &mdash; Fit Any Workflow</h2>
+    <p class="sec-intro">Whether your team works in a browser, via API integration, or inside AI-powered tools, we have an interface for you.</p>
+
+    <div class="grid grid-3" style="margin-top:28px;">
+      <div class="aug-card aug-card-cyan">
+        <div style="font-size:1.8rem;margin-bottom:12px;">&#9632;</div>
+        <h3 style="font-family:var(--font-display);color:var(--datastream);margin-bottom:8px;">Web Console</h3>
+        <p style="color:var(--safeguard-dim);font-size:0.88rem;margin-bottom:12px;">Intuitive web interface for fund search, manager lookup, template editing, and rating results. Built for RM and compliance daily workflow.</p>
+        <ul style="list-style:none;font-size:0.82rem;color:var(--safeguard-dim);">
+          <li>&#9656; Rating Template Editor</li>
+          <li>&#9656; Manager Detail + 10D DD</li>
+          <li>&#9656; NAV Chart + Performance</li>
+          <li>&#9656; One-Click Report Export</li>
+        </ul>
+      </div>
+      <div class="aug-card aug-card-cyan">
+        <div style="font-size:1.8rem;margin-bottom:12px;">&#9670;</div>
+        <h3 style="font-family:var(--font-display);color:var(--datastream);margin-bottom:8px;">REST API</h3>
+        <p style="color:var(--safeguard-dim);font-size:0.88rem;margin-bottom:12px;">Standard RESTful API for seamless integration with internal systems including CRM, compliance platforms, and trading desks.</p>
+        <ul style="list-style:none;font-size:0.82rem;color:var(--safeguard-dim);">
+          <li>&#9656; 40+ API Endpoints</li>
+          <li>&#9656; JSON, Standard HTTP</li>
+          <li>&#9656; CORS Cross-Origin</li>
+          <li>&#9656; Python/JS SDK Available</li>
+        </ul>
+      </div>
+      <div class="aug-card aug-card-cyan">
+        <div style="font-size:1.8rem;margin-bottom:12px;">&#9654;</div>
+        <h3 style="font-family:var(--font-display);color:var(--datastream);margin-bottom:8px;">MCP / AI Agent</h3>
+        <p style="color:var(--safeguard-dim);font-size:0.88rem;margin-bottom:12px;">27 MCP tools enabling AI assistants to directly query fund data, compute ratings, and generate DD opinions in natural language.</p>
+        <ul style="list-style:none;font-size:0.82rem;color:var(--safeguard-dim);">
+          <li>&#9656; Natural Language Queries</li>
+          <li>&#9656; AI-Assisted DD Analysis</li>
+          <li>&#9656; Real-Time Rating Compute</li>
+          <li>&#9656; Claude Code / IDE Integration</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ PRICING ═══════════ -->
+<section class="alt">
+  <div class="container" style="position:relative;">
+    <div class="jp-marker">契約</div>
+    <span class="sec-tag">plans</span>
+    <h2>Flexible Pricing &mdash; Customized to Your Needs</h2>
+    <p class="sec-intro">Scoped to your product shelf size, user count, and integration depth.</p>
+
+    <div class="grid grid-2" style="margin-top:32px;">
+      <div class="price-card">
+        <h3>Standard</h3>
+        <div class="amt">Custom Quote</div>
+        <div class="unit">Annual Subscription</div>
+        <ul>
+          <li>Full fund database (2,021 funds)</li>
+          <li>10-Dimension KYP scoring</li>
+          <li>18-Factor Manager DD rating</li>
+          <li>Web console access</li>
+          <li>Daily data refresh</li>
+          <li>Standard API (rate-limited)</li>
+          <li>Email support</li>
+        </ul>
+        <a href="#" class="btn btn-ghost">Request Demo</a>
+      </div>
+      <div class="price-card featured">
+        <div class="price-rec">RECOMMENDED</div>
+        <h3 style="color:var(--datastream);">Enterprise</h3>
+        <div class="amt">Custom Quote</div>
+        <div class="unit">Annual Subscription</div>
+        <ul>
+          <li>Everything in Standard</li>
+          <li>Private OFC data (2,231 funds)</li>
+          <li>Custom rating templates with adjustable weights and thresholds</li>
+          <li>Unlimited API access</li>
+          <li>MCP / AI Agent integration</li>
+          <li>Bespoke data connector development</li>
+          <li>On-premise or private cloud deployment</li>
+          <li>SLA guarantee + dedicated support</li>
+        </ul>
+        <a href="#" class="btn btn-primary glitch-hover">Request Demo</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="io-divider">
+
+<!-- ═══════════ FAQ ═══════════ -->
+<section class="grid-section">
+  <div class="container" style="position:relative;">
+    <span class="sec-tag">faq</span>
+    <h2>Frequently Asked Questions</h2>
+
+    <details>
+      <summary>Where does the data come from? How often is it updated?</summary>
+      <div class="content">
+        <p>Data sources: SFC Public Register (daily sync), 50+ manager websites (daily scrape), Yahoo Finance (daily NAV), SFC Enforcement Notices (real-time), HKEX (periodic), Webb-Site and Wikipedia (weekly). Core data refreshed daily, fully automated.</p>
+      </div>
+    </details>
+    <details>
+      <summary>Can the rating model be customized?</summary>
+      <div class="content">
+        <p>Fully customizable. Enterprise users can create custom rating templates: adjust 18 factor weights, modify scoring thresholds (F1&ndash;F5 boundaries), select different scoring functions. Six preset templates including Broker 18I provided as starting points. All changes take effect immediately with historical ratings preserved for audit.</p>
+      </div>
+    </details>
+    <details>
+      <summary>How is data accuracy ensured?</summary>
+      <div class="content">
+        <p>(1) Multi-source cross-validation: ISIN triple-checked across SFC register, manager site, and Yahoo Finance. (2) All auto-parsed results retain original document links for manual verification. (3) Every rating score has explicit source fields and computation logic, fully auditable. (4) Data update timestamps transparently displayed.</p>
+      </div>
+    </details>
+    <details>
+      <summary>Can this be deployed on-premise?</summary>
+      <div class="content">
+        <p>Yes. Enterprise supports on-premise private deployment: all data collection, storage, and API services run inside your corporate network. Data never leaves your infrastructure. Private cloud deployment on AWS, Azure, or Alibaba Cloud also supported.</p>
+      </div>
+    </details>
+    <details>
+      <summary>What fund types are covered?</summary>
+      <div class="content">
+        <p>All SFC-authorized public funds (2,021): equity, bond, balanced, money market, ETFs, structured products, L&amp;I products, synthetic ETFs, and 154 public OFC sub-funds. Additionally: 2,231 private OFCs and non-authorized funds for PI-only distribution.</p>
+      </div>
+    </details>
+  </div>
+</section>
+
+<!-- ═══════════ FOOTER ═══════════ -->
+<div class="footer">
+  <div class="brand">SANAKAN<span>//</span>DATAHUB</div>
+  <p>Empowering HK brokerages with automated fund KYP due diligence<span class="cursor">_</span></p>
+  <div class="easter-egg">Safeguard System v4.0 | Type 9 Target: 2478 | All Factors Entropy &gt; 0.5 | Status: OPERATIONAL</div>
+</div>
+
+</body>
+</html>

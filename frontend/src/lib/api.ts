@@ -1569,6 +1569,70 @@ export async function triggerAnnFetch(): Promise<void> {
 
 const TW_STOCK_API = process.env.NEXT_PUBLIC_TW_STOCK_API_URL || "http://127.0.0.1:8007";
 
+/* ── SK Hynix Cross-Market (:8008) ── */
+
+const HYNIX_API = process.env.NEXT_PUBLIC_HYNIX_API_URL || "http://127.0.0.1:8008";
+
+export interface HynixInstrument {
+  ticker: string;
+  name: string;
+  market: string;
+  currency: string;
+  instrument_type: string;
+  leverage: number;
+  tracking_ratio: number | null;
+  skh_weight: number;
+  yf_ticker: string;
+  note: string;
+}
+
+export interface HynixArbitrageInstrument {
+  ticker: string;
+  name: string;
+  market: string;
+  currency: string;
+  instrument_type: string;
+  leverage: number;
+  price_local: number;
+  price_krw: number;
+  nav_local: number | null;
+  nav_krw: number | null;
+  tracking_ratio: number;
+  equivalent_krw_per_share: number;
+  premium_pct_vs_base: number;
+  nav_premium_pct: number | null;
+}
+
+export interface HynixArbitrageSnapshot {
+  date: string;
+  base_ticker: string;
+  base_price_krw: number;
+  fx_rates: Record<string, number>;
+  count: number;
+  instruments: HynixArbitrageInstrument[];
+}
+
+export interface HynixPricePoint {
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  nav: number | null;
+  change_pct: number | null;
+}
+
+export interface HynixArbitrageHistoryPoint {
+  date: string;
+  price_local: number;
+  price_krw: number;
+  base_price_krw: number;
+  equivalent_krw_per_share: number;
+  premium_pct: number;
+  nav_premium_pct: number | null;
+}
+
 export interface TwListedStock {
   code: string;
   name: string;
@@ -2018,4 +2082,96 @@ export async function fetchRatingResults(
   );
   if (!res.ok) return null;
   return res.json();
+}
+
+/* ── SK Hynix Cross-Market (:8008) ── */
+
+export async function fetchHynixInstruments(
+  market?: string
+): Promise<HynixInstrument[]> {
+  const sp = new URLSearchParams();
+  if (market) sp.set("market", market);
+  const qs = sp.toString();
+  const res = await fetch(`${HYNIX_API}/api/v1/instruments${qs ? `?${qs}` : ""}`, {
+    next: { revalidate: 300 },
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.instruments || [];
+}
+
+export async function fetchHynixLatestArbitrage(): Promise<HynixArbitrageSnapshot | null> {
+  const res = await fetch(`${HYNIX_API}/api/v1/arbitrage/latest`, {
+    next: { revalidate: 60 },
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export async function fetchHynixArbitrageByDate(
+  date: string
+): Promise<HynixArbitrageSnapshot | null> {
+  const res = await fetch(`${HYNIX_API}/api/v1/arbitrage/${date}`, {
+    next: { revalidate: 300 },
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export async function fetchHynixArbitrageHistory(
+  ticker: string,
+  start?: string,
+  end?: string,
+  limit: number = 60
+): Promise<HynixArbitrageHistoryPoint[]> {
+  const sp = new URLSearchParams({ limit: String(limit) });
+  if (start) sp.set("start", start);
+  if (end) sp.set("end", end);
+  const res = await fetch(
+    `${HYNIX_API}/api/v1/arbitrage/${ticker}/history?${sp}`,
+    { next: { revalidate: 60 } }
+  );
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.history || [];
+}
+
+export async function fetchHynixPrices(
+  ticker: string,
+  limit: number = 60
+): Promise<HynixPricePoint[]> {
+  const res = await fetch(
+    `${HYNIX_API}/api/v1/prices/${ticker}?limit=${limit}`,
+    { next: { revalidate: 60 } }
+  );
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.prices || [];
+}
+
+export async function fetchHynixAvailableDates(
+  limit: number = 30
+): Promise<string[]> {
+  const res = await fetch(`${HYNIX_API}/api/v1/dates?limit=${limit}`, {
+    next: { revalidate: 300 },
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.dates || [];
+}
+
+export async function fetchHynixFXLatest(): Promise<{
+  date: string;
+  rates: Record<string, number>;
+} | null> {
+  const res = await fetch(`${HYNIX_API}/api/v1/fx/latest`, {
+    next: { revalidate: 60 },
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export async function triggerHynixFetch(date?: string): Promise<void> {
+  const params = date ? `?date=${date}` : "";
+  await fetch(`${HYNIX_API}/api/v1/fetch${params}`, { method: "POST" });
 }

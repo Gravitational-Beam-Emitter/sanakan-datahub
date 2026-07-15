@@ -15,6 +15,7 @@ const TABS = [
   { href: "/tw-stock", label: "TW台股" },
   { href: "/kr-stock", label: "KR韩股" },
   { href: "/industry-chain", label: "产业链" },
+  { href: "/hynix", label: "海力士" },
 ];
 
 export default function NavBar() {

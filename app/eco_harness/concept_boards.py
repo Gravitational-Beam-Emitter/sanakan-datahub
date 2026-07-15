@@ -61,14 +61,14 @@ BOARDS = {
 def fetch_board(code: str, start: str = "20200101", end: str = "") -> pd.DataFrame:
     """Fetch concept board daily K-line via AKShare (East Money backend).
 
-    Retries up to 4x with jittered exponential backoff (5s → 10s → 20s → 30s).
+    Retries up to 5x with jittered backoff (5s → 10s → 20s → 30s → 45s).
     """
     import random
     end = end or pd.Timestamp.now().strftime("%Y%m%d")
 
     import akshare as ak
     last_err = None
-    for attempt in range(4):
+    for attempt in range(5):
         try:
             raw = ak.stock_board_concept_hist_em(
                 symbol=code, period="daily",
@@ -107,7 +107,7 @@ class ConceptBoardHarness:
     """Harness for A-share concept board indices (光通信/芯片/AI算力/小金属/覆铜板)."""
 
     _last_fetch: float = 0.0
-    _FETCH_GAP = 1.0  # min seconds between board fetches
+    _FETCH_GAP = 2.0  # min seconds between board fetches (server IPs need more gap)
 
     def __init__(self):
         self._cache: dict[str, pd.DataFrame] = {}

@@ -1,0 +1,291 @@
+"""
+FastAPI REST API — SK Hynix cross-market arbitrage data.
+
+Usage:
+    python -m uvicorn hynix.api:app --host 127.0.0.1 --port 8008
+
+Endpoints:
+    GET  /api/v1/health              — Service health
+    GET  /api/v1/instruments          — List tracked instruments
+    GET  /api/v1/arbitrage/latest     — Latest arbitrage snapshot
+    GET  /api/v1/arbitrage/{date}     — Arbitrage for a specific date
+    GET  /api/v1/arbitrage/{ticker}/history — Premium history for an instrument
+    GET  /api/v1/prices/{ticker}      — Price history for an instrument
+    GET  /api/v1/fx/latest            — Latest FX rates
+    GET  /api/v1/fx/history           — FX rate history
+    GET  /api/v1/dates                — Available trading dates
+    POST /api/v1/fetch                — Trigger daily fetch
+    POST /api/v1/init                 — Full init with backfill
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Optional
+
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+
+from hynix.storage import (
+    init_db,
+    get_counts,
+    get_instruments,
+    get_daily_prices,
+    get_prices_for_date,
+    get_fx_rates,
+    get_fx_history,
+    get_arbitrage,
+    get_arbitrage_history,
+    get_available_dates,
+    get_latest_summary,
+    get_fetch_status,
+)
+from hynix.pipeline import (
+    fetch_daily,
+    fetch_latest,
+    init_pipeline,
+)
+
+logger = logging.getLogger("hynix.api")
+
+app = FastAPI(
+    title="SK Hynix Cross-Market API",
+    description="SK Hynix arbitrage comparison across KR stock, US ADR, HK ETP, and KR ETFs",
+    version="0.1.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+def _serialize_records(records):
+    """Convert date/time objects to ISO strings and NaN to None."""
+    import math
+    for r in records:
+        for k, v in list(r.items()):
+            if hasattr(v, "isoformat"):
+                s = v.isoformat()
+                r[k] = None if s == "NaT" else s
+            elif isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                r[k] = None
+    return records
+
+
+# ── Health ─────────────────────────────────────────────────────
+
+@app.get("/api/v1/health")
+def health():
+    conn = init_db(read_only=True)
+    try:
+        counts = get_counts(conn)
+        return {"status": "ok", **counts}
+    finally:
+        conn.close()
+
+
+# ── Instruments ────────────────────────────────────────────────
+
+@app.get("/api/v1/instruments")
+def list_instruments(
+    market: Optional[str] = Query(None, description="Filter by market: KR, US, HK"),
+):
+    conn = init_db(read_only=True)
+    try:
+        df = get_instruments(conn, market=market)
+        records = df.to_dict(orient="records")
+        _serialize_records(records)
+        return {"count": len(records), "instruments": records}
+    finally:
+        conn.close()
+
+
+# ── Arbitrage ──────────────────────────────────────────────────
+
+@app.get("/api/v1/arbitrage/latest")
+def latest_arbitrage():
+    """Get the latest cross-market arbitrage snapshot."""
+    conn = init_db(read_only=True)
+    try:
+        summary = get_latest_summary(conn)
+        if summary is None:
+            raise HTTPException(status_code=404, detail="No arbitrage data available")
+        _serialize_records(summary["instruments"])
+        return summary
+    finally:
+        conn.close()
+
+
+@app.get("/api/v1/arbitrage/{date}")
+def arbitrage_by_date(date: str):
+    """Get arbitrage comparison for a specific date."""
+    conn = init_db(read_only=True)
+    try:
+        df = get_arbitrage(conn, date)
+        if df.empty:
+            raise HTTPException(status_code=404, detail=f"No arbitrage data for {date}")
+        fx = get_fx_rates(conn, date)
+        records = df.to_dict(orient="records")
+        _serialize_records(records)
+        base_price = df.iloc[0]["base_price_krw"] if not df.empty else None
+        return {
+            "date": date,
+            "base_ticker": "000660.KS",
+            "base_price_krw": base_price,
+            "fx_rates": fx,
+            "instruments": records,
+        }
+    finally:
+        conn.close()
+
+
+@app.get("/api/v1/arbitrage/{ticker}/history")
+def arbitrage_history(
+    ticker: str,
+    start: Optional[str] = Query(None, description="Start date YYYY-MM-DD"),
+    end: Optional[str] = Query(None, description="End date YYYY-MM-DD"),
+    limit: int = Query(60, ge=1, le=200),
+):
+    """Get premium/discount time series for a specific instrument."""
+    conn = init_db(read_only=True)
+    try:
+        df = get_arbitrage_history(conn, ticker, start=start, end=end, limit=limit)
+        if df.empty:
+            raise HTTPException(status_code=404, detail=f"No arbitrage history for {ticker}")
+        records = df.to_dict(orient="records")
+        _serialize_records(records)
+        return {"ticker": ticker, "count": len(records), "history": records}
+    finally:
+        conn.close()
+
+
+# ── Prices ─────────────────────────────────────────────────────
+
+@app.get("/api/v1/prices/{ticker}")
+def price_history(
+    ticker: str,
+    start: Optional[str] = Query(None, description="Start date YYYY-MM-DD"),
+    end: Optional[str] = Query(None, description="End date YYYY-MM-DD"),
+    limit: int = Query(60, ge=1, le=200),
+):
+    """Get price history for an instrument."""
+    conn = init_db(read_only=True)
+    try:
+        df = get_daily_prices(conn, ticker, start=start, end=end, limit=limit)
+        if df.empty:
+            raise HTTPException(status_code=404, detail=f"No price data for {ticker}")
+        records = df.to_dict(orient="records")
+        _serialize_records(records)
+        return {"ticker": ticker, "count": len(records), "prices": records}
+    finally:
+        conn.close()
+
+
+@app.get("/api/v1/prices")
+def prices_by_date(date: str = Query(..., description="Date YYYY-MM-DD")):
+    """Get all instrument prices for a given date."""
+    conn = init_db(read_only=True)
+    try:
+        df = get_prices_for_date(conn, date)
+        if df.empty:
+            raise HTTPException(status_code=404, detail=f"No price data for {date}")
+        records = df.to_dict(orient="records")
+        _serialize_records(records)
+        return {"date": date, "count": len(records), "prices": records}
+    finally:
+        conn.close()
+
+
+# ── FX Rates ──────────────────────────────────────────────────
+
+@app.get("/api/v1/fx/latest")
+def latest_fx():
+    """Get the latest FX rates."""
+    conn = init_db(read_only=True)
+    try:
+        latest_row = conn.execute(
+            "SELECT MAX(date) FROM hynix_fx_rates"
+        ).fetchone()
+        if latest_row is None or latest_row[0] is None:
+            raise HTTPException(status_code=404, detail="No FX data available")
+        latest_date = str(latest_row[0])
+        fx = get_fx_rates(conn, latest_date)
+        return {"date": latest_date, "rates": fx}
+    finally:
+        conn.close()
+
+
+@app.get("/api/v1/fx/history")
+def fx_history(
+    from_ccy: str = Query("USD", description="Source currency (USD, HKD)"),
+    to_ccy: str = Query("KRW", description="Target currency (KRW)"),
+    limit: int = Query(60, ge=1, le=200),
+):
+    """Get FX rate history."""
+    conn = init_db(read_only=True)
+    try:
+        df = get_fx_history(conn, from_ccy=from_ccy, to_ccy=to_ccy, limit=limit)
+        if df.empty:
+            raise HTTPException(status_code=404, detail=f"No FX history for {from_ccy}/{to_ccy}")
+        records = df.to_dict(orient="records")
+        _serialize_records(records)
+        return {"from": from_ccy, "to": to_ccy, "count": len(records), "history": records}
+    finally:
+        conn.close()
+
+
+# ── Dates ─────────────────────────────────────────────────────
+
+@app.get("/api/v1/dates")
+def available_dates(limit: int = Query(30, le=60)):
+    conn = init_db(read_only=True)
+    try:
+        dates = get_available_dates(conn, limit=limit)
+        return {"count": len(dates), "dates": dates}
+    finally:
+        conn.close()
+
+
+# ── Fetch Status ──────────────────────────────────────────────
+
+@app.get("/api/v1/fetch/status")
+def fetch_status(days: int = Query(7, le=30)):
+    conn = init_db(read_only=True)
+    try:
+        df = get_fetch_status(conn, days=days)
+        records = df.to_dict(orient="records")
+        _serialize_records(records)
+        return {"count": len(records), "logs": records}
+    finally:
+        conn.close()
+
+
+# ── Fetch Triggers ────────────────────────────────────────────
+
+@app.post("/api/v1/fetch")
+def trigger_fetch(date: Optional[str] = None):
+    """Trigger daily fetch (defaults to latest trading day)."""
+    if date:
+        result = fetch_daily(date)
+    else:
+        result = fetch_latest()
+    return {"status": "completed", "result": result}
+
+
+@app.post("/api/v1/init")
+def trigger_init(lookback: int = Query(90, ge=7, le=365)):
+    """Full init: seed instruments + backfill."""
+    result = init_pipeline(lookback_days=lookback)
+    return {"status": "completed", "result": result}
+
+
+# ── Startup ───────────────────────────────────────────────────
+
+@app.on_event("startup")
+def startup():
+    init_db()
+    logger.info("SK Hynix Cross-Market API started")

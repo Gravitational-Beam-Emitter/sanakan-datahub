@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HK Fund KYP Module — 香港基金尽调数据平台</title>
+<style>
+  :root {
+    --bg: #0f172a; --bg2: #1e293b; --bg3: #334155;
+    --text: #e2e8f0; --text2: #94a3b8; --muted: #64748b;
+    --accent: #38bdf8; --accent2: #818cf8; --green: #4ade80;
+    --orange: #fb923c; --red: #f87171; --pink: #f472b6;
+    --border: #334155;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; line-height:1.7; }
+  .container { max-width:1200px; margin:0 auto; padding:40px 24px; }
+  h1 { font-size:2.4rem; font-weight:800; background:linear-gradient(135deg,var(--accent),var(--accent2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; margin-bottom:8px; }
+  h2 { font-size:1.6rem; font-weight:700; color:var(--accent); margin:48px 0 16px; padding-bottom:8px; border-bottom:2px solid var(--border); }
+  h3 { font-size:1.2rem; font-weight:600; color:var(--text); margin:24px 0 12px; }
+  p, li { color:var(--text2); }
+  a { color:var(--accent); text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  .subtitle { color:var(--muted); font-size:1.1rem; margin-bottom:32px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px; margin:16px 0; }
+  .grid-3 { grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); }
+  .card { background:var(--bg2); border:1px solid var(--border); border-radius:12px; padding:20px; }
+  .card h3 { margin-top:0; font-size:1rem; color:var(--accent); }
+  .card .num { font-size:2.2rem; font-weight:800; color:var(--text); }
+  .card .label { font-size:0.85rem; color:var(--muted); }
+  table { width:100%; border-collapse:collapse; margin:16px 0; font-size:0.92rem; }
+  th { text-align:left; padding:10px 12px; background:var(--bg2); color:var(--accent); font-weight:600; border-bottom:2px solid var(--border); }
+  td { padding:8px 12px; border-bottom:1px solid var(--border); color:var(--text2); }
+  tr:hover td { background:var(--bg3); }
+  .tag { display:inline-block; padding:2px 10px; border-radius:12px; font-size:0.78rem; font-weight:600; }
+  .tag-green { background:#14532d; color:var(--green); }
+  .tag-blue { background:#1e3a5f; color:var(--accent); }
+  .tag-orange { background:#3d2e0a; color:var(--orange); }
+  .tag-purple { background:#2d1b4e; color:var(--accent2); }
+  .tag-pink { background:#4a1942; color:var(--pink); }
+  .tag-red { background:#4a1919; color:var(--red); }
+  .bar { height:8px; background:var(--bg3); border-radius:4px; margin:4px 0; overflow:hidden; }
+  .bar-fill { height:100%; border-radius:4px; transition:width 0.3s; }
+  .bar-f1 { background:var(--green); } .bar-f2 { background:var(--accent); } .bar-f3 { background:var(--orange); } .bar-f4 { background:var(--pink); } .bar-f5 { background:var(--red); }
+  .factor-row { display:flex; align-items:center; gap:12px; padding:6px 0; }
+  .factor-name { width:200px; font-size:0.88rem; flex-shrink:0; }
+  .factor-weight { width:48px; text-align:right; font-size:0.8rem; color:var(--muted); flex-shrink:0; }
+  .factor-bar { flex:1; }
+  .factor-ent { width:56px; text-align:right; font-size:0.8rem; flex-shrink:0; }
+  .ent-good { color:var(--green); } .ent-ok { color:var(--orange); } .ent-low { color:var(--red); }
+  .pipeline-flow { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:20px 0; }
+  .pipe-node { background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:10px 16px; font-size:0.85rem; white-space:nowrap; }
+  .pipe-arrow { color:var(--muted); font-size:1.2rem; }
+  .code-block { background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:16px; font-family:"SF Mono",Monaco,monospace; font-size:0.82rem; overflow-x:auto; white-space:pre; color:var(--text2); }
+  .endpoint { font-family:"SF Mono",Monaco,monospace; font-size:0.82rem; }
+  .method-get { color:var(--green); } .method-post { color:var(--orange); } .method-put { color:var(--accent); } .method-delete { color:var(--red); }
+  .highlight { color:var(--accent); font-weight:600; }
+  ul { margin:8px 0 8px 24px; }
+  li { margin:4px 0; }
+  .section-hero { text-align:center; padding:60px 0 40px; }
+  .badge-row { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin:20px 0; }
+  .footer { text-align:center; padding:40px; color:var(--muted); font-size:0.85rem; border-top:1px solid var(--border); margin-top:60px; }
+  .dual-col { display:grid; grid-template-columns:1fr 1fr; gap:24px; }
+  @media (max-width:768px) { .dual-col { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<!-- ═══════════ HERO ═══════════ -->
+<div class="section-hero">
+  <h1>HK Fund KYP 香港基金尽调数据平台</h1>
+  <p class="subtitle">SFC-authorized fund database · 10-Dimension KYP due diligence · 18-Indicator Broker DD rating · 50+ Manager ISIN scrapers</p>
+  <div class="badge-row">
+    <span class="tag tag-green">2,021 SFC Funds</span>
+    <span class="tag tag-blue">2,478 Type 9 Managers</span>
+    <span class="tag tag-purple">444K NAV Records</span>
+    <span class="tag tag-orange">50+ Connectors</span>
+    <span class="tag tag-pink">18 Rating Factors</span>
+    <span class="tag tag-green">27 MCP Tools</span>
+  </div>
+</div>
+
+<!-- ═══════════ ARCHITECTURE ═══════════ -->
+<h2>1. System Architecture</h2>
+
+<div class="grid">
+  <div class="card">
+    <h3>Data Layer</h3>
+    <p>DuckDB (<code>hk_funds.duckdb</code>, 842 MB)<br>23 tables · embedded OLAP engine<br>Zero-dependency deployment</p>
+  </div>
+  <div class="card">
+    <h3>Pipeline Layer</h3>
+    <p>14 data pipelines<br>50+ manager website connectors<br>Scheduled refresh via cron</p>
+  </div>
+  <div class="card">
+    <h3>API Layer</h3>
+    <p>FastAPI on port 8004<br>40+ REST endpoints<br>CORS-enabled for frontend</p>
+  </div>
+  <div class="card">
+    <h3>Rating Engine</h3>
+    <p>Template-driven scoring<br>6 system templates · 15 scoring types<br>Weighted-average → F1~F5 categories</p>
+  </div>
+  <div class="card">
+    <h3>MCP Server</h3>
+    <p>27 MCP tools exposed<br>Fund search · NAV · Rating · KYP<br>Claude Code native integration</p>
+  </div>
+  <div class="card">
+    <h3>Frontend</h3>
+    <p>Next.js at <code>/hk-funds</code><br>Template editor + Rating results<br>Fund &amp; manager detail views</p>
+  </div>
+</div>
+
+<!-- ═══════════ DATA PIPELINES ═══════════ -->
+<h2>2. Data Pipelines</h2>
+
+<div class="pipeline-flow">
+  <div class="pipe-node">SFC Public Register<br><span class="tag tag-blue">WINGS API</span></div>
+  <span class="pipe-arrow">→</span>
+  <div class="pipe-node">Webb-Site<br><span class="tag tag-green">Company Data</span></div>
+  <span class="pipe-arrow">→</span>
+  <div class="pipe-node">Wikipedia<br><span class="tag tag-purple">ZH + EN</span></div>
+  <span class="pipe-arrow">→</span>
+  <div class="pipe-node">50+ Manager<br><span class="tag tag-orange">ISIN Scrapers</span></div>
+  <span class="pipe-arrow">→</span>
+  <div class="pipe-node">Yahoo Finance<br><span class="tag tag-pink">NAV History</span></div>
+</div>
+
+<h3>Pipeline Details</h3>
+<table>
+  <tr><th>Pipeline</th><th>Command</th><th>Description</th></tr>
+  <tr>
+    <td><strong>pipeline_wings.py</strong></td>
+    <td class="endpoint"><code>python3 -m hk_funds.pipeline_wings --link</code></td>
+    <td>Fetch 3,500+ SFC licensed corporations from WINGS public API. Links funds to managers by name matching.</td>
+  </tr>
+  <tr>
+    <td><strong>pipeline_funds.py</strong></td>
+    <td class="endpoint"><code>python3 -m hk_funds.pipeline_funds</code></td>
+    <td>Fetch 2,021 SFC-authorized funds with full metadata. Runs classification engine for complex/derivative product detection.</td>
+  </tr>
+  <tr>
+    <td><strong>pipeline_webb_site.py</strong></td>
+    <td class="endpoint"><code>python3 -m hk_funds.pipeline_webb_site</code></td>
+    <td>Scrape Webb-Site for: incorporation date, name history count, license effective date, website URL. Critical for rating engine proxy signals.</td>
+  </tr>
+  <tr>
+    <td><strong>pipeline_wikipedia.py</strong></td>
+    <td class="endpoint"><code>python3 -m hk_funds.pipeline_wikipedia</code></td>
+    <td>Match managers to Chinese + English Wikipedia articles. Powers institutional_reputation factor.</td>
+  </tr>
+  <tr>
+    <td><strong>pipeline_manager_aum.py</strong></td>
+    <td class="endpoint"><code>python3 -m hk_funds.pipeline_manager_aum</code></td>
+    <td>Collect AUM data for 1,951 managers. Multi-source: SFC filings, manager websites, public disclosures.</td>
+  </tr>
+  <tr>
+    <td><strong>pipeline_manager_dd.py</strong></td>
+    <td class="endpoint"><code>python3 -m hk_funds.pipeline_manager_dd</code></td>
+    <td>Auto-score 10 DD dimensions for 2,362 managers. Uses license tiers, company age, Wikipedia, website signals.</td>
+  </tr>
+  <tr>
+    <td><strong>pipeline_sfc_enforcement_api.py</strong></td>
+    <td class="endpoint"><code>python3 -m hk_funds.pipeline_sfc_enforcement_api</code></td>
+    <td>Fetch SFC enforcement actions. 335 records covering 39 Type 9 managers with enforcement history.</td>
+  </tr>
+  <tr>
+    <td><strong>pipeline_manager_scrape.py</strong></td>
+    <td class="endpoint"><code>python3 -m hk_funds.pipeline_manager_scrape</code></td>
+    <td>Orchestrate 50+ manager connectors. Each connector extracts ISINs, performance data, NAV from fund manager websites.</td>
+  </tr>
+  <tr>
+    <td><strong>backfill_nav_yfinance.py</strong></td>
+    <td class="endpoint"><code>python3 -m hk_funds.backfill_nav_yfinance</code></td>
+    <td>Download full NAV history from Yahoo Finance for 548 funds with ISINs. 444K records from 1991-present.</td>
+  </tr>
+  <tr>
+    <td><strong>pipeline_fund_performance.py</strong></td>
+    <td class="endpoint"><code>python3 -m hk_funds.pipeline_fund_performance</code></td>
+    <td>Compute YTD/1M/3M/6M/1Y/3Y/5Y returns from NAV history. 264 funds with performance metrics.</td>
+  </tr>
+  <tr>
+    <td><strong>pipeline_hkex_import.py</strong></td>
+    <td class="endpoint"><code>python3 -m hk_funds.pipeline_hkex_import</code></td>
+    <td>Import HKEX-listed fund products including ETF ISINs from ListOfSecurities.</td>
+  </tr>
+  <tr>
+    <td><strong>pipeline_enforcement.py</strong></td>
+    <td class="endpoint"><code>python3 -m hk_funds.pipeline_enforcement</code></td>
+    <td>Cross-reference SFC enforcement with manager database. Updates has_sfc_enforcement_history flag.</td>
+  </tr>
+  <tr>
+    <td><strong>pipeline_ofc.py</strong></td>
+    <td class="endpoint"><code>python3 -m hk_funds.pipeline_ofc</code></td>
+    <td>Fetch Open-ended Fund Company (OFC) register. 2,231 private OFCs tracked.</td>
+  </tr>
+</table>
+
+<!-- ═══════════ MANAGER CONNECTORS ═══════════ -->
+<h2>3. Manager Connectors <span class="tag tag-orange">51 connectors</span></h2>
+
+<p>Each connector targets one fund manager's website or API, extracting ISIN codes, fund metadata, performance data, and NAV history. They share a common base class in <code>manager_connectors/base.py</code> that handles rate-limiting, retries, and automatic NAV collection.</p>
+
+<p><strong>Scraping strategies:</strong></p>
+<div class="grid">
+  <div class="card">
+    <h3>API-based (fast)</h3>
+    <p>FundsMarketingHandler, REST endpoints<br>JPMorgan · HSBC · Franklin Templeton · Amundi · Invesco · Fidelity</p>
+  </div>
+  <div class="card">
+    <h3>Playwright/HTML (slow)</h3>
+    <p>Browser automation for SPA websites<br>BlackRock · Schroders · Allianz · UBS · BNP Paribas · Capital Group</p>
+  </div>
+  <div class="card">
+    <h3>Static HTML (fast)</h3>
+    <p>requests + BeautifulSoup<br>ChinaAMC · CSOP · Mirae · Hang Seng · E Fund · Bosera · Harvest · ICBC</p>
+  </div>
+</div>
+
+<h3>Complete Connector Registry</h3>
+<table>
+  <tr><th>#</th><th>Connector</th><th>Manager</th><th>CE Number</th><th>Strategy</th></tr>
+  <tr><td>1</td><td>jpmorgan.py</td><td>JPMorgan Asset Management</td><td>AAA121</td><td><span class="tag tag-green">API</span></td></tr>
+  <tr><td>2</td><td>hsbc.py</td><td>HSBC Global Asset Management</td><td>AAL758</td><td><span class="tag tag-green">API</span></td></tr>
+  <tr><td>3</td><td>fidelity.py</td><td>Fidelity International</td><td>AGU513</td><td><span class="tag tag-green">API</span></td></tr>
+  <tr><td>4</td><td>franklin_templeton.py</td><td>Franklin Templeton</td><td>BGY439</td><td><span class="tag tag-green">API</span></td></tr>
+  <tr><td>5</td><td>amundi.py</td><td>Amundi Hong Kong</td><td>AVH500</td><td><span class="tag tag-green">API</span></td></tr>
+  <tr><td>6</td><td>invesco.py</td><td>Invesco Hong Kong</td><td>BGD825</td><td><span class="tag tag-green">API</span></td></tr>
+  <tr><td>7</td><td>blackrock.py</td><td>BlackRock Asset Management</td><td>AZJ721</td><td><span class="tag tag-orange">Playwright</span></td></tr>
+  <tr><td>8</td><td>schroders.py</td><td>Schroders Investment Management</td><td>ACJ534</td><td><span class="tag tag-orange">Playwright</span></td></tr>
+  <tr><td>9</td><td>allianz.py</td><td>Allianz Global Investors</td><td>BND657</td><td><span class="tag tag-orange">Playwright</span></td></tr>
+  <tr><td>10</td><td>ubs.py</td><td>UBS Asset Management</td><td>AXT597</td><td><span class="tag tag-orange">Playwright</span></td></tr>
+  <tr><td>11</td><td>bnp_paribas.py</td><td>BNP Paribas Asset Management</td><td>AQD970</td><td><span class="tag tag-orange">Playwright</span></td></tr>
+  <tr><td>12</td><td>capital_group.py</td><td>Capital Group</td><td>BNM462</td><td><span class="tag tag-orange">Playwright</span></td></tr>
+  <tr><td>13</td><td>alliance_bernstein.py</td><td>AllianceBernstein</td><td>BNG455</td><td><span class="tag tag-orange">Playwright</span></td></tr>
+  <tr><td>14</td><td>abrdn.py</td><td>abrdn Hong Kong</td><td>AXG762</td><td><span class="tag tag-orange">Playwright</span></td></tr>
+  <tr><td>15</td><td>eastspring.py</td><td>Eastspring Investments</td><td>BNJ694</td><td><span class="tag tag-orange">Playwright</span></td></tr>
+  <tr><td>16</td><td>pinebridge.py</td><td>PineBridge Investments</td><td>AVJ379</td><td><span class="tag tag-orange">Playwright</span></td></tr>
+  <tr><td>17</td><td>principal.py</td><td>Principal Asset Management</td><td>BGV506</td><td><span class="tag tag-orange">Playwright</span></td></tr>
+  <tr><td>18</td><td>ninety_one.py</td><td>Ninety One</td><td>BNG089</td><td><span class="tag tag-orange">Playwright</span></td></tr>
+  <tr><td>19</td><td>chinaamc.py</td><td>China Asset Management (HK)</td><td>AVH002</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>20</td><td>csop.py</td><td>CSOP Asset Management</td><td>ARN075</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>21</td><td>mirae.py</td><td>Mirae Asset Global Investments</td><td>BEW874</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>22</td><td>hangseng.py</td><td>Hang Seng Investment Management</td><td>APX855</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>23</td><td>efund.py</td><td>E Fund Management (HK)</td><td>BAB929</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>24</td><td>bosera.py</td><td>Bosera Asset Management</td><td>ARO125</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>25</td><td>harvest.py</td><td>Harvest Global Investments</td><td>ASE396</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>26</td><td>icbc.py</td><td>ICBC Credit Suisse Asset Management</td><td>BKC619</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>27</td><td>premia.py</td><td>Premia Partners</td><td>BJJ214</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>28</td><td>samsung.py</td><td>Samsung Asset Management (HK)</td><td>BJC332</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>29</td><td>value_partners.py</td><td>Value Partners Group</td><td>AXH635</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>30</td><td>statestreet.py</td><td>State Street Global Advisors</td><td>AQD832</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>31</td><td>fubon.py</td><td>Fubon Asset Management (HK)</td><td>BNP153</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>32</td><td>pingan.py</td><td>Ping An of China Asset Management</td><td>BOM808</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>33</td><td>taikang.py</td><td>Taikang Asset Management (HK)</td><td>BJO652</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>34</td><td>huaan.py</td><td>HuaAn Asset Management (HK)</td><td>BGY263</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>35</td><td>fullgoal.py</td><td>Fullgoal Asset Management (HK)</td><td>BHK227</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>36</td><td>dacheng.py</td><td>Da Cheng International Asset Mgmt</td><td>BHD836</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>37</td><td>cinda.py</td><td>Cinda International Asset Mgmt</td><td>AUW244</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>38</td><td>gf_international.py</td><td>GF International Investment Mgmt</td><td>BIN421</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>39</td><td>china_universal.py</td><td>China Universal Asset Mgmt (HK)</td><td>AZM440</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>40</td><td>china_life_franklin.py</td><td>China Life Franklin Asset Mgmt</td><td>AZD369</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>41</td><td>cmbi.py</td><td>CMBI Asset Management</td><td>AZD327</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>42</td><td>cms.py</td><td>CMS Asset Management (HK)</td><td>BFH285</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>43</td><td>boci_prudential.py</td><td>BOCI-Prudential Asset Mgmt</td><td>ARU623</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>44</td><td>clsa.py</td><td>CLSA Capital Partners</td><td>APX740</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>45</td><td>kgi.py</td><td>KGI Asset Management</td><td>APW834</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>46</td><td>bea_union.py</td><td>BEA Union Investment Mgmt</td><td>BAB578</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>47</td><td>income_partners.py</td><td>Income Partners Asset Mgmt</td><td>BGD469</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>48</td><td>pickers.py</td><td>Pickers Capital Management</td><td>BOM924</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>49</td><td>asset_mg.py</td><td>Asset Management (Generic)</td><td>—</td><td><span class="tag tag-blue">HTML</span></td></tr>
+  <tr><td>50</td><td>hkex_etf.py</td><td>HKEX ETF Products</td><td>—</td><td><span class="tag tag-green">API</span></td></tr>
+  <tr><td>51</td><td>base.py</td><td>Base Connector (abstract)</td><td>—</td><td><span class="tag tag-purple">Shared Logic</span></td></tr>
+</table>
+
+<!-- ═══════════ RATING ENGINE ═══════════ -->
+<h2>4. Rating Engine</h2>
+
+<h3>4.1 Template System</h3>
+<table>
+  <tr><th>ID</th><th>Template Name</th><th>Type</th><th>Factors</th><th>User</th></tr>
+  <tr><td>2</td><td>SFC 6-Factor (v1.0)</td><td><span class="tag tag-blue">fund_risk</span></td><td>6</td><td>system</td></tr>
+  <tr><td>3</td><td>Broker 13-Factor Scorecard (v1.0)</td><td><span class="tag tag-blue">fund_risk</span></td><td>13</td><td>system</td></tr>
+  <tr><td>4</td><td>10-Dimension DD (v1.0)</td><td><span class="tag tag-purple">manager_dd</span></td><td>10 pass-count</td><td>system</td></tr>
+  <tr><td>6</td><td><strong>Broker 18-Indicator DD (v1.0)</strong></td><td><span class="tag tag-purple">manager_dd</span></td><td>18 weighted</td><td>system</td></tr>
+  <tr><td>7</td><td>My Custom SFC</td><td><span class="tag tag-blue">fund_risk</span></td><td>6</td><td>demo</td></tr>
+  <tr><td>8</td><td>IT Custom Template</td><td><span class="tag tag-blue">fund_risk</span></td><td>—</td><td>integration-test</td></tr>
+</table>
+
+<h3>4.2 Broker 18-Indicator DD — 18 Factors</h3>
+
+<p>Target universe: <strong>2,478 Type 9 (Asset Management) SFC-licensed corporations</strong>.</p>
+<p>Scoring: Each factor scores 1-5 (1=best, lowest risk). Weighted average mapped to F1-F5 categories via thresholds: F1≤1.5, F2≤2.5, F3≤3.5, F4≤4.0, F5≤5.0.</p>
+<p style="color:var(--green);margin:8px 0;"><strong>All 18 factors achieve entropy ≥ 0.5 (good differentiation).</strong></p>
+
+<div class="dual-col">
+<div>
+
+<h4>Fund House (14%)</h4>
+<div class="factor-row"><span class="factor-name">Internal Control</span><span class="factor-weight">0.14</span><div class="factor-bar"><div class="bar"><div class="bar-fill bar-f2" style="width:78%"></div></div></div><span class="factor-ent ent-good">0.789</span></div>
+<div style="font-size:0.78rem;color:var(--muted);margin-left:260px;">10 DD dimension pass-count → Strong/Sufficient/Average/Limited/Lacking</div>
+
+<h4 style="margin-top:20px;">Fund Manager Quality (20%)</h4>
+<div class="factor-row"><span class="factor-name">establishment_years</span><span class="factor-weight">0.05</span><div class="factor-bar"><div class="bar"><div class="bar-fill bar-f2" style="width:91%"></div></div></div><span class="factor-ent ent-good">0.907</span></div>
+<div class="factor-row"><span class="factor-name">shareholder_strength</span><span class="factor-weight">0.05</span><div class="factor-bar"><div class="bar"><div class="bar-fill bar-f2" style="width:81%"></div></div></div><span class="factor-ent ent-good">0.812</span></div>
+<div class="factor-row"><span class="factor-name">paid_in_capital</span><span class="factor-weight">0.02</span><div class="factor-bar"><div class="bar"><div class="bar-fill bar-f2" style="width:51%"></div></div></div><span class="factor-ent ent-good">0.513</span></div>
+<div class="factor-row"><span class="factor-name">regulatory_penalties</span><span class="factor-weight">0.08</span><div class="factor-bar"><div class="bar"><div class="bar-fill bar-f2" style="width:56%"></div></div></div><span class="factor-ent ent-good">0.555</span></div>
+
+<h4 style="margin-top:20px;">Operational DD (20%)</h4>
+<div class="factor-row"><span class="factor-name">internal_governance</span><span class="factor-weight">0.02</span><div class="factor-bar"><div class="bar"><div class="bar-fill bar-f2" style="width:79%"></div></div></div><span class="factor-ent ent-good">0.789</span></div>
+<div class="factor-row"><span class="factor-name">risk_control_system</span><span class="factor-weight">0.08</span><div class="factor-bar"><div class="bar"><div class="bar-fill bar-f2" style="width:72%"></div></div></div><span class="factor-ent ent-good">0.721</span></div>
+<div class="factor-row"><span class="factor-name">investment_research</span><span class="factor-weight">0.05</span><div class="factor-bar"><div class="bar"><div class="bar-fill bar-f2" style="width:75%"></div></div></div><span class="factor-ent ent-good">0.745</span></div>
+<div class="factor-row"><span class="factor-name">employee_count</span><span class="factor-weight">0.03</span><div class="factor-bar"><div class="bar"><div class="bar-fill bar-f2" style="width:53%"></div></div></div><span class="factor-ent ent-good">0.526</span></div>
+<div class="factor-row"><span class="factor-name">fund_manager_years</span><span class="factor-weight">0.05</span><div class="factor-bar"><div class="bar"><div class="bar-fill bar-f2" style="width:90%"></div></div></div><span class="factor-ent ent-good">0.897</span></div>
+
+</div>
+<div>
+
+<h4>Management Scale (22%)</h4>
+<div class="factor-row"><span class="factor-name">management_scale</span><span class="factor-weight">0.12</span><div class="factor-bar"><div class="bar"><div class="bar-fill bar-f2" style="width:67%"></div></div></div><span class="factor-ent ent-good">0.670</span></div>
+<div class="factor-row"><span class="factor-name">scale_growth</span><span class="factor-weight">0.05</span><div class="factor-bar"><div class="bar"><div class="bar-fill bar-f2" style="width:53%"></div></div></div><span class="factor-ent ent-good">0.525</span></div>
+<div class="factor-row"><span class="factor-name">profitable_product_ratio</span><span class="factor-weight">0.10</span><div class="factor-bar"><div class="bar"><div class="bar-fill bar-f2" style="width:60%"></div></div></div><span class="factor-ent ent-good">0.603</span></div>
+
+<h4 style="margin-top:20px;">Governance & Track Record (10%)</h4>
+<div class="factor-row"><span class="factor-name">management_changes</span><span class="factor-weight">0.05</span><div class="factor-bar"><div class="bar"><div class="bar-fill bar-f2" style="width:78%"></div></div></div><span class="factor-ent ent-good">0.783</span></div>
+<div class="factor-row"><span class="factor-name">cumulative_fund_count</span><span class="factor-weight">0.05</span><div class="factor-bar"><div class="bar"><div class="bar-fill bar-f2" style="width:54%"></div></div></div><span class="factor-ent ent-good">0.536</span></div>
+
+<h4 style="margin-top:20px;">Market Reputation (14%)</h4>
+<div class="factor-row"><span class="factor-name">institutional_reputation</span><span class="factor-weight">0.08</span><div class="factor-bar"><div class="bar"><div class="bar-fill bar-f2" style="width:85%"></div></div></div><span class="factor-ent ent-good">0.845</span></div>
+<div class="factor-row"><span class="factor-name">distribution_channels</span><span class="factor-weight">0.07</span><div class="factor-bar"><div class="bar"><div class="bar-fill bar-f2" style="width:83%"></div></div></div><span class="factor-ent ent-good">0.825</span></div>
+<div class="factor-row"><span class="factor-name">investor_composition</span><span class="factor-weight">0.03</span><div class="factor-bar"><div class="bar"><div class="bar-fill bar-f2" style="width:82%"></div></div></div><span class="factor-ent ent-good">0.824</span></div>
+<div class="factor-row"><span class="factor-name">investor_services</span><span class="factor-weight">0.02</span><div class="factor-bar"><div class="bar"><div class="bar-fill bar-f2" style="width:77%"></div></div></div><span class="factor-ent ent-good">0.765</span></div>
+
+</div>
+</div>
+
+<h3>4.3 Scoring Types</h3>
+<table>
+  <tr><th>Type</th><th>Description</th><th>Used By</th></tr>
+  <tr><td><code>range</code></td><td>Numeric bands: min/max → score. Supports type_boost and fallback_field.</td><td>establishment_years, management_changes, cumulative_fund_count, institutional_reputation, distribution_channels, investor_composition, investor_services</td></tr>
+  <tr><td><code>dd_dimension</code></td><td>Map a specific DD dimension score (1-5) to factor score.</td><td>shareholder_strength, internal_governance, risk_control_system, investment_research</td></tr>
+  <tr><td><code>inverse_boolean</code></td><td>Check for enforcement history. Uses count bands for granularity. Proxy risk signals for clean managers (license tenure, company age).</td><td>regulatory_penalties</td></tr>
+  <tr><td><code>manager_aum_range</code></td><td>Compare AUM (HKD) against size bands. AUM estimation for managers without real data.</td><td>management_scale</td></tr>
+  <tr><td><code>manager_years</code></td><td>License tenure bands (years since SFC license effective date).</td><td>fund_manager_years</td></tr>
+  <tr><td><code>profitable_product_ratio</code></td><td>% of funds with positive returns. Proxy estimation from AUM, wiki, license tenure for managers without performance data.</td><td>profitable_product_ratio</td></tr>
+  <tr><td><code>scale_growth</code></td><td>% of funds authorized in last 3 years. Proxy uses composite: license tenure + AUM + name changes + website + multi-license.</td><td>scale_growth</td></tr>
+  <tr><td><code>employee_count</code></td><td>Estimated from AUM, fund_count, wiki, website signals.</td><td>employee_count</td></tr>
+  <tr><td><code>paid_in_capital</code></td><td>Estimated from AUM, fund_count, wiki, establishment_years. Uses reordered check hierarchy to avoid clustering.</td><td>paid_in_capital</td></tr>
+  <tr><td><code>lookup</code></td><td>Exact match on field value → score_map with keyword fallbacks.</td><td>Fund classification factors</td></tr>
+  <tr><td><code>keyword</code></td><td>Pattern matching against text fields with fund_type fallbacks.</td><td>Fund classification factors</td></tr>
+  <tr><td><code>benchmark_diff</code></td><td>Fund metric vs benchmark comparison.</td><td>Fund risk factors</td></tr>
+  <tr><td><code>manager_dd_score</code></td><td>Map internal_control tier (Strong/Sufficient/Average/Limited/Lacking) to score.</td><td>Internal control composite</td></tr>
+  <tr><td><code>has_portfolio_manager</code></td><td>Boolean check for named portfolio manager.</td><td>Fund quality factors</td></tr>
+  <tr><td><code>manual</code></td><td>Always returns default_score. For user-filled data.</td><td>User-customized factors</td></tr>
+</table>
+
+<h3>4.4 Rating Distribution (Broker 18I, 2,478 managers)</h3>
+<div class="grid">
+  <div class="card" style="text-align:center">
+    <div class="num" style="color:var(--green)">4</div>
+    <div class="label">F1 (≤1.5) — Lowest Risk</div>
+    <div class="bar" style="margin-top:8px"><div class="bar-fill bar-f1" style="width:0.2%"></div></div>
+    <div style="font-size:0.78rem;color:var(--muted)">0.2%</div>
+  </div>
+  <div class="card" style="text-align:center">
+    <div class="num" style="color:var(--accent)">171</div>
+    <div class="label">F2 (1.5~2.5) — Low Risk</div>
+    <div class="bar" style="margin-top:8px"><div class="bar-fill bar-f2" style="width:6.9%"></div></div>
+    <div style="font-size:0.78rem;color:var(--muted)">6.9%</div>
+  </div>
+  <div class="card" style="text-align:center">
+    <div class="num" style="color:var(--orange)">1,351</div>
+    <div class="label">F3 (2.5~3.5) — Medium Risk</div>
+    <div class="bar" style="margin-top:8px"><div class="bar-fill bar-f3" style="width:54.5%"></div></div>
+    <div style="font-size:0.78rem;color:var(--muted)">54.5%</div>
+  </div>
+  <div class="card" style="text-align:center">
+    <div class="num" style="color:var(--pink)">702</div>
+    <div class="label">F4 (3.5~4.0) — High Risk</div>
+    <div class="bar" style="margin-top:8px"><div class="bar-fill bar-f4" style="width:28.3%"></div></div>
+    <div style="font-size:0.78rem;color:var(--muted)">28.3%</div>
+  </div>
+  <div class="card" style="text-align:center">
+    <div class="num" style="color:var(--red)">250</div>
+    <div class="label">F5 (4.0~5.0) — Highest Risk</div>
+    <div class="bar" style="margin-top:8px"><div class="bar-fill bar-f5" style="width:10.1%"></div></div>
+    <div style="font-size:0.78rem;color:var(--muted)">10.1%</div>
+  </div>
+</div>
+
+<h3>4.5 10-Dimension Manager DD</h3>
+<p>Auto-scored for <strong>2,362 managers</strong>, each dimension scored 1-5. Uses multi-license tiers (RA9-only, RA4+RA9, RA1+RA4+RA9), company age, Wikipedia presence, website availability, and license tenure bands.</p>
+<table>
+  <tr><th>DD Dimension</th><th>Avg Score</th><th>Range</th><th>Scoring Basis</th></tr>
+  <tr><td>financial_resources</td><td>2.7</td><td>1-5</td><td>License tier + AUM proxy + wiki</td></tr>
+  <tr><td>human_resources</td><td>2.5</td><td>1-5</td><td>License tier + estimated employee count</td></tr>
+  <tr><td>internal_controls</td><td>3.2</td><td>1-5</td><td>License tier + company age + wiki</td></tr>
+  <tr><td>risk_governance</td><td>3.3</td><td>2-5</td><td>License tier + enforcement history</td></tr>
+  <tr><td>segregation_duties</td><td>3.5</td><td>2-5</td><td>Multi-license → more segregated</td></tr>
+  <tr><td>compliance_function</td><td>3.5</td><td>2-5</td><td>License tier + regulatory history</td></tr>
+  <tr><td>audit_function</td><td>3.4</td><td>2-5</td><td>Company age + wiki + website</td></tr>
+  <tr><td>custodian_dd</td><td>3.5</td><td>2-5</td><td>RA1 license + fund_count + company age</td></tr>
+  <tr><td>valuer_dd</td><td>3.1</td><td>2-5</td><td>License tier + fund complexity</td></tr>
+  <tr><td>delegates_monitoring</td><td>3.2</td><td>2-5</td><td>License tier + company age</td></tr>
+</table>
+
+<p><strong>Internal Control tiers</strong> (based on DD pass count, threshold ≥4): Strong (8-10 passed): 16%, Sufficient (6-7): 16%, Average (4-5): 15%, Limited (2-3): 23%, Lacking (0-1): 30%.</p>
+
+<!-- ═══════════ API ═══════════ -->
+<h2>5. REST API</h2>
+
+<h3>5.1 Template &amp; Rating (6 endpoints)</h3>
+<table>
+  <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+  <tr><td><span class="method-get">GET</span></td><td class="endpoint">/api/v1/templates</td><td>List templates (?template_type=fund_risk|manager_dd)</td></tr>
+  <tr><td><span class="method-get">GET</span></td><td class="endpoint">/api/v1/templates/{id}</td><td>Get template with all factors + configs + thresholds</td></tr>
+  <tr><td><span class="method-post">POST</span></td><td class="endpoint">/api/v1/templates/clone</td><td>Clone template (body: {source_template_id, user_id, new_name?})</td></tr>
+  <tr><td><span class="method-put">PUT</span></td><td class="endpoint">/api/v1/templates/{id}</td><td>Update user template weights/thresholds/name</td></tr>
+  <tr><td><span class="method-post">POST</span></td><td class="endpoint">/api/v1/templates/{id}/compute</td><td>Compute ratings (body: {user_id, target_type})</td></tr>
+  <tr><td><span class="method-get">GET</span></td><td class="endpoint">/api/v1/templates/{id}/results</td><td>Get rating results (?user_id=, target_type=)</td></tr>
+</table>
+
+<h3>5.2 Funds (12 endpoints)</h3>
+<table>
+  <tr><td><span class="method-get">GET</span></td><td class="endpoint">/api/v1/funds</td><td>List funds (filters: derivative, complex, type, domicile, search)</td></tr>
+  <tr><td><span class="method-get">GET</span></td><td class="endpoint">/api/v1/funds/stats</td><td>Fund statistics (dual-dimension breakdown)</td></tr>
+  <tr><td><span class="method-get">GET</span></td><td class="endpoint">/api/v1/funds/{id}</td><td>Full fund detail (classification + manager + NAV + performance)</td></tr>
+  <tr><td><span class="method-get">GET</span></td><td class="endpoint">/api/v1/funds/{id}/nav-history</td><td>NAV time series (?start=, ?end=)</td></tr>
+  <tr><td><span class="method-get">GET</span></td><td class="endpoint">/api/v1/funds/{id}/nav-latest</td><td>Latest NAV snapshot</td></tr>
+  <tr><td><span class="method-get">GET</span></td><td class="endpoint">/api/v1/funds/{id}/performance</td><td>Performance metrics (YTD/1M/3M/6M/1Y/3Y/5Y)</td></tr>
+  <tr><td><span class="method-get">GET</span></td><td class="endpoint">/api/v1/funds/{id}/holdings</td><td>Top holdings</td></tr>
+  <tr><td><span class="method-get">GET</span></td><td class="endpoint">/api/v1/funds/{id}/dividends</td><td>Dividend history</td></tr>
+  <tr><td><span class="method-get">GET</span></td><td class="endpoint">/api/v1/funds/{id}/share-classes</td><td>Share class variants</td></tr>
+  <tr><td><span class="method-get">GET</span></td><td class="endpoint">/api/v1/funds/{id}/risk-rating</td><td>Risk rating detail</td></tr>
+  <tr><td><span class="method-get">GET</span></td><td class="endpoint">/api/v1/funds/search</td><td>Full-text search</td></tr>
+  <tr><td><span class="method-get">GET</span></td><td class="endpoint">/api/v1/funds/isins</td><td>List funds with ISINs (paginated)</td></tr>
+</table>
+
+<h3>5.3 Managers (7 endpoints)</h3>
+<table>
+  <tr><td><span class="method-get">GET</span></td><td class="endpoint">/api/v1/managers</td><td>List managers (filters: license_type, status, enforcement)</td></tr>
+  <tr><td><span class="method-get">GET</span></td><td class="endpoint">/api/v1/managers/stats</td><td>Manager statistics</td></tr>
+  <tr><td><span class="method-get">GET</span></td><td class="endpoint">/api/v1/managers/{id}</td><td>Manager detail (funds + regulatory + DD scores)</td></tr>
+  <tr><td><span class="method-get">GET</span></td><td class="endpoint">/api/v1/managers/{id}/funds</td><td>Funds managed</td></tr>
+  <tr><td><span class="method-get">GET</span></td><td class="endpoint">/api/v1/managers/{id}/dd</td><td>10-dimension DD assessment</td></tr>
+  <tr><td><span class="method-get">GET</span></td><td class="endpoint">/api/v1/managers/{id}/regulatory</td><td>Enforcement history</td></tr>
+  <tr><td><span class="method-post">POST</span></td><td class="endpoint">/api/v1/managers/scrape</td><td>Trigger manager scraping</td></tr>
+</table>
+
+<!-- ═══════════ MCP TOOLS ═══════════ -->
+<h2>6. MCP Tools <span class="tag tag-purple">27 tools</span></h2>
+
+<div class="dual-col">
+<div>
+<h3>Rating &amp; Template</h3>
+<table>
+  <tr><th>Tool</th><th>Description</th></tr>
+  <tr><td>hk_rating_template_list</td><td>List rating templates (system/user)</td></tr>
+  <tr><td>hk_rating_template_get</td><td>Get template with full factor configs</td></tr>
+  <tr><td>hk_rating_template_clone</td><td>Clone template for customization</td></tr>
+  <tr><td>hk_rating_template_update</td><td>Update user template weights/thresholds</td></tr>
+  <tr><td>hk_rating_compute</td><td>Compute ratings for all targets</td></tr>
+  <tr><td>hk_rating_results</td><td>Get rating distribution + scores</td></tr>
+</table>
+
+<h3 style="margin-top:20px;">Fund Data</h3>
+<table>
+  <tr><td>hk_fund_search</td><td>Search by name/ISIN/SFC auth#</td></tr>
+  <tr><td>hk_fund_stats</td><td>Fund statistics overview</td></tr>
+  <tr><td>hk_fund_risk_ratings</td><td>Risk ratings with filters</td></tr>
+  <tr><td>hk_fund_isin_lookup</td><td>Lookup fund by ISIN</td></tr>
+  <tr><td>hk_fund_isins</td><td>List funds with ISINs (paginated)</td></tr>
+  <tr><td>hk_fund_latest_nav</td><td>Most recent NAV</td></tr>
+  <tr><td>hk_fund_nav_history</td><td>NAV time series</td></tr>
+  <tr><td>hk_fund_performance</td><td>YTD/1M/3M/6M/1Y/3Y/5Y returns</td></tr>
+  <tr><td>hk_fund_holdings</td><td>Top holdings with sector/country</td></tr>
+  <tr><td>hk_fund_dividends</td><td>Dividend history</td></tr>
+  <tr><td>hk_fund_share_classes</td><td>Share class variants</td></tr>
+  <tr><td>hk_fund_portfolio_manager</td><td>Search/get portfolio manager</td></tr>
+</table>
+</div>
+<div>
+<h3>Classification &amp; KYP</h3>
+<table>
+  <tr><td>hk_complex_products</td><td>List §5.5 complex products</td></tr>
+  <tr><td>hk_derivative_products</td><td>List §5.1A derivative products</td></tr>
+  <tr><td>hk_kyp_dimensions</td><td>10-D KYP assessment per fund</td></tr>
+  <tr><td>hk_kyp_gaps</td><td>Funds with missing KYP dims</td></tr>
+</table>
+
+<h3 style="margin-top:20px;">Manager Data</h3>
+<table>
+  <tr><td>hk_fund_managers</td><td>Search SFC-licensed managers</td></tr>
+  <tr><td>hk_manager_dd</td><td>10-D DD assessment per manager</td></tr>
+  <tr><td>hk_manager_scrape_status</td><td>Connector registry + gaps</td></tr>
+</table>
+
+<h3 style="margin-top:20px;">Other</h3>
+<table>
+  <tr><td>hk_ofc_stats</td><td>OFC umbrella/sub-fund counts</td></tr>
+  <tr><td>hk_non_authorized_funds</td><td>PI-only distribution funds</td></tr>
+</table>
+</div>
+</div>
+
+<!-- ═══════════ DATABASE ═══════════ -->
+<h2>7. Database Schema</h2>
+
+<div class="dual-col">
+<div>
+<h3>Core Tables</h3>
+<table>
+  <tr><th>Table</th><th>Rows</th><th>Description</th></tr>
+  <tr><td>hk_funds</td><td class="highlight">2,021</td><td>SFC-authorized funds</td></tr>
+  <tr><td>hk_fund_managers</td><td class="highlight">5,570</td><td>SFC-licensed corporations</td></tr>
+  <tr><td>hk_fund_classifications</td><td>2,021</td><td>Complex/derivative classification</td></tr>
+  <tr><td>hk_fund_manager_funds</td><td>2,027</td><td>Fund-manager M:N linking</td></tr>
+  <tr><td>hk_fund_documents</td><td>0</td><td>Offering documents (pending)</td></tr>
+  <tr><td>hkex_listed_funds</td><td>0</td><td>HKEX-listed products</td></tr>
+</table>
+
+<h3 style="margin-top:20px;">Financial Data Tables</h3>
+<table>
+  <tr><th>Table</th><th>Rows</th><th>Description</th></tr>
+  <tr><td>hk_fund_nav_history</td><td class="highlight">444,198</td><td>NAV time series (1991-2026)</td></tr>
+  <tr><td>hk_fund_performance</td><td>264</td><td>YTD/1M/3M/1Y/3Y/5Y returns</td></tr>
+  <tr><td>hk_fund_manager_aum</td><td>1,951</td><td>Manager AUM records</td></tr>
+  <tr><td>hk_fund_share_classes</td><td>1,166</td><td>Share class ISINs</td></tr>
+  <tr><td>hk_fund_holdings</td><td>691</td><td>Top holdings data</td></tr>
+  <tr><td>hk_fund_dividends</td><td>2,384</td><td>Dividend records</td></tr>
+</table>
+</div>
+<div>
+<h3>Rating &amp; DD Tables</h3>
+<table>
+  <tr><th>Table</th><th>Rows</th><th>Description</th></tr>
+  <tr><td>hk_rating_templates</td><td>6</td><td>Rating templates</td></tr>
+  <tr><td>hk_template_factors</td><td>50</td><td>Template factor definitions</td></tr>
+  <tr><td>hk_user_ratings</td><td class="highlight">158,690</td><td>Rating results (all runs)</td></tr>
+  <tr><td>hk_manager_dd</td><td>23,620</td><td>10-D DD assessments</td></tr>
+  <tr><td>hk_fund_risk_ratings</td><td>2,021</td><td>Fund risk ratings</td></tr>
+</table>
+
+<h3 style="margin-top:20px;">KYP &amp; Compliance</h3>
+<table>
+  <tr><th>Table</th><th>Rows</th><th>Description</th></tr>
+  <tr><td>hk_kyp_dimensions</td><td>20,210</td><td>KYP due diligence</td></tr>
+  <tr><td>hk_kyp_assessment_log</td><td>4,039</td><td>KYP assessment history</td></tr>
+  <tr><td>hk_manager_regulatory_history</td><td>335</td><td>SFC enforcement actions</td></tr>
+  <tr><td>hk_non_authorized_funds</td><td>2,231</td><td>Private OFC funds</td></tr>
+</table>
+
+<h3 style="margin-top:20px;">System</h3>
+<table>
+  <tr><th>Table</th><th>Rows</th><th>Description</th></tr>
+  <tr><td>hk_fetch_log</td><td>7</td><td>Data fetch audit trail</td></tr>
+</table>
+</div>
+</div>
+
+<!-- ═══════════ FRONTEND ═══════════ -->
+<h2>8. Frontend</h2>
+
+<div class="grid">
+  <div class="card">
+    <h3>HK Fund KYP Dashboard</h3>
+    <p>URL: <code>/hk-funds</code></p>
+    <p>Main entry point. Fund search, classification browser, complex/derivative product filtering. Manager detail panel with DD scores and regulatory history.</p>
+  </div>
+  <div class="card">
+    <h3>Template Editor</h3>
+    <p>URL: <code>/hk-funds</code> → TemplateEditor tab</p>
+    <p>View all 6 templates. Clone system templates for customization. Modify factor weights with real-time weight validation. Edit category thresholds.</p>
+    <p>API: <code>fetchTemplates()</code>, <code>cloneTemplate()</code>, <code>updateTemplate()</code></p>
+  </div>
+  <div class="card">
+    <h3>Rating Results</h3>
+    <p>URL: <code>/hk-funds</code> → RatingResults tab</p>
+    <p>F1-F5 distribution chart. Sortable manager table with overall score + 18 factor breakdown. Filter by category or search by manager name.</p>
+    <p>API: <code>computeRatings()</code>, <code>fetchRatingResults()</code></p>
+  </div>
+  <div class="card">
+    <h3>NAV &amp; Performance</h3>
+    <p>Fund detail → NAV chart + Performance table</p>
+    <p>Interactive NAV time series. YTD/1M/3M/6M/1Y/3Y/5Y returns. Performance vs benchmark comparison.</p>
+    <p>API: <code>fetchHKFundDetail()</code>, <code>fetchHKFundPerformance()</code></p>
+  </div>
+</div>
+
+<!-- ═══════════ DEPLOYMENT ═══════════ -->
+<h2>9. Deployment</h2>
+
+<h3>Server Architecture</h3>
+<div class="code-block">Server: /opt/eco-data/
+├── hk_funds/                  # Python backend module
+│   ├── api.py                 # FastAPI server (port 8004)
+│   ├── rating_engine.py       # Template-driven scoring engine (1,592 lines)
+│   ├── storage.py             # DuckDB storage layer (2,507 lines)
+│   ├── manager_scoring.py     # Internal Control scoring
+│   ├── manager_connectors/    # 51 manager website scrapers
+│   └── hk_funds.duckdb        # Database (842 MB, 22 tables)
+├── mcp/eco_data_server.py     # MCP server (2,638 lines, 27 HK tools)
+├── eco_data_sdk/              # Python client SDK
+└── frontend/src/app/hk-funds/ # Next.js frontend pages</div>
+
+<h3>Deployment Model</h3>
+<ul>
+  <li><strong>Code-only deployment</strong>: Replace .py / .tsx / .ts files. <span style="color:var(--red)">Never overwrite .duckdb</span></li>
+  <li><strong>Data regenerated on server</strong>: All new data (DD scores, NAV, ratings) computed by running pipeline scripts post-deploy</li>
+  <li><strong>Incremental upserts</strong>: All pipelines use upsert (INSERT OR REPLACE), safe to re-run</li>
+  <li><strong>Scheduled refresh</strong>: Weekly SFC fund/manager refresh + daily enforcement cross-check via <code>hk_funds/scheduler.py</code></li>
+</ul>
+
+<h3>Quick Start (after code deploy)</h3>
+<div class="code-block">systemctl restart hk-funds-api
+
+# Seed templates + compute ratings
+python3 -c "
+from hk_funds.standard_templates import seed_standard_templates
+from hk_funds.storage import init_db
+conn = init_db(); seed_standard_templates(conn); conn.close()
+"
+python3 -m hk_funds.pipeline_manager_dd
+curl -X POST http://127.0.0.1:8004/api/v1/templates/6/compute \
+  -H 'Content-Type: application/json' \
+  -d '{"user_id":"broker_18i","target_type":"manager"}'
+
+# Rebuild frontend
+cd frontend && npm run build && systemctl restart zt-frontend</div>
+
+<!-- ═══════════ CODE METRICS ═══════════ -->
+<h2>10. Code Metrics</h2>
+
+<div class="grid">
+  <div class="card">
+    <div class="num">7,961</div>
+    <div class="label">Total Python lines (hk_funds core)</div>
+  </div>
+  <div class="card">
+    <div class="num">2,638</div>
+    <div class="label">MCP server lines</div>
+  </div>
+  <div class="card">
+    <div class="num">51</div>
+    <div class="label">Manager connectors</div>
+  </div>
+  <div class="card">
+    <div class="num">23</div>
+    <div class="label">Database tables</div>
+  </div>
+  <div class="card">
+    <div class="num">40+</div>
+    <div class="label">REST API endpoints</div>
+  </div>
+  <div class="card">
+    <div class="num">15</div>
+    <div class="label">Scoring types</div>
+  </div>
+</div>
+
+<p style="text-align:center;margin-top:16px;">Key files: <code>rating_engine.py</code> (1,592 lines) · <code>api.py</code> (1,360 lines) · <code>storage.py</code> (2,507 lines) · <code>pipeline_manager_dd.py</code> (792 lines) · <code>backfill_nav_yfinance.py</code> (250 lines)</p>
+
+</div>
+
+<div class="footer">
+  HK Fund KYP Module v4 · Broker 18-Indicator DD Rating · June 2026<br>
+  Built on DuckDB + FastAPI + Next.js · Data from SFC WINGS, Webb-Site, Wikipedia, Yahoo Finance
+</div>
+
+</body>
+</html>

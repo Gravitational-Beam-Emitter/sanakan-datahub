@@ -12,6 +12,14 @@ hk_funds.duckdb
 hk_funds.duckdb.wal
 us_listings.duckdb
 us_listings.duckdb.wal
+kr_stock/kr_stock.duckdb
+kr_stock/kr_stock.duckdb.wal
+name_data/name_data.duckdb
+name_data/name_data.duckdb.wal
+hynix/hynix.duckdb
+hynix/hynix.duckdb.wal
+tw_stock/tw_stock.duckdb
+tw_stock/tw_stock.duckdb.wal
 __pycache__/
 *.pyc
 node_modules/
@@ -19,5 +27,7 @@ node_modules/
 .DS_Store
 .claude/settings.local.json
 .claude/worktrees/
+.claude/scheduled_tasks.lock
+frontend/.impeccable/
 us_corp_actions/scheduler.log
 us_corp_actions/scheduler_error.log

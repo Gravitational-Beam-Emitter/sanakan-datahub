@@ -100,21 +100,24 @@ def fetch_daily_prices(date: str, db_path: Optional[str] = None,
     """
     import FinanceDataReader as fdr
 
-    conn = init_db(db_path)
-
     if tickers is None:
-        df_stocks = get_listed_stocks(conn, active_only=True, limit=10000)
-        tickers = df_stocks["code"].tolist()
+        conn_ro = init_db(db_path, read_only=True)
+        try:
+            df_stocks = get_listed_stocks(conn_ro, active_only=True, limit=10000)
+            tickers = df_stocks["code"].tolist()
+        finally:
+            conn_ro.close()
 
     if not tickers:
         logger.warning("No tickers to fetch prices for")
-        conn.close()
         return 0
 
     norm_date = date.replace("-", "")[:8]
     rows = []
     success = 0
     fail = 0
+    total_count = 0
+    batch_size = 200
 
     for code in tickers:
         try:
@@ -138,16 +141,31 @@ def fetch_daily_prices(date: str, db_path: Optional[str] = None,
             fail += 1
             continue
 
+        # Flush batch to DB and release lock
+        if len(rows) >= batch_size:
+            conn = init_db(db_path)
+            try:
+                df_prices = pd.DataFrame(rows)
+                total_count += upsert_daily_prices(conn, df_prices)
+            finally:
+                conn.close()
+            rows.clear()
+            logger.info(f"Prices for {_to_date_str(date)}: {success} stocks ok, {fail} failed so far ({total_count} records flushed)")
+
     if rows:
-        df_prices = pd.DataFrame(rows)
-        count = upsert_daily_prices(conn, df_prices)
-        logger.info(f"Prices for {_to_date_str(date)}: {count} records ({success} stocks ok, {fail} failed)")
+        conn = init_db(db_path)
+        try:
+            df_prices = pd.DataFrame(rows)
+            total_count += upsert_daily_prices(conn, df_prices)
+        finally:
+            conn.close()
+
+    if total_count > 0:
+        logger.info(f"Prices for {_to_date_str(date)}: {total_count} records total ({success} stocks ok, {fail} failed)")
     else:
-        count = 0
         logger.warning(f"No price data for {date}")
 
-    conn.close()
-    return count
+    return total_count
 
 
 def fetch_indices(date: str = None, db_path: Optional[str] = None) -> int:
@@ -573,77 +591,87 @@ def fetch_daily(date: str, use_llm: bool = True, db_path: Optional[str] = None) 
         "errors": [],
     }
 
-    conn = init_db(db_path)
+    # 1. Daily prices (only refresh listings periodically)
+    summary["prices"] = fetch_daily_prices(date, db_path)
 
-    try:
-        # 1. Daily prices (only refresh listings periodically)
-        summary["prices"] = fetch_daily_prices(date, db_path)
+    # 2. Indices
+    fetch_indices(date, db_path)
 
-        # 2. Indices
-        fetch_indices(date, db_path)
+    # 3. Identify significant movers
+    summary["movers"] = fetch_significant_movers(date, db_path)
 
-        # 3. Identify significant movers
-        summary["movers"] = fetch_significant_movers(date, db_path)
-
-        # 3.5 yfinance fundamentals for mover stocks (valuation, financials, analyst)
-        if summary["movers"] > 0:
+    # 3.5 yfinance fundamentals for mover stocks (valuation, financials, analyst)
+    if summary["movers"] > 0:
+        try:
+            conn_ro = init_db(db_path, read_only=True)
             try:
-                mover_codes = conn.execute("""
+                mover_codes = conn_ro.execute("""
                     SELECT DISTINCT code FROM kr_significant_movers WHERE date = ?
                 """, [_norm_date(date)]).fetchall()
-                codes = [r[0] for r in mover_codes]
-                if codes:
-                    logger.info(f"[{date}] Fetching yfinance fundamentals for {len(codes)} mover stocks")
-                    summary["metrics"] = fetch_stock_metrics(codes, db_path)
-                    summary["financials"] = fetch_stock_financials(codes, db_path)
-                    summary["analyst"] = fetch_analyst_data(codes, db_path)
-            except Exception as e:
-                err = f"yfinance fundamentals failed: {e}"
-                summary["errors"].append(err)
-                logger.error(err)
+            finally:
+                conn_ro.close()
+            codes = [r[0] for r in mover_codes]
+            if codes:
+                logger.info(f"[{date}] Fetching yfinance fundamentals for {len(codes)} mover stocks")
+                summary["metrics"] = fetch_stock_metrics(codes, db_path)
+                summary["financials"] = fetch_stock_financials(codes, db_path)
+                summary["analyst"] = fetch_analyst_data(codes, db_path)
+        except Exception as e:
+            err = f"yfinance fundamentals failed: {e}"
+            summary["errors"].append(err)
+            logger.error(err)
 
-        # 4. Foreign flows
-        fetch_foreign_flows(date, db_path)
+    # 4. Foreign flows
+    fetch_foreign_flows(date, db_path)
 
-        # 5. DART filings
-        summary["filings"] = fetch_dart_filings(date, db_path)
+    # 5. DART filings
+    summary["filings"] = fetch_dart_filings(date, db_path)
 
-        # 6. LLM tagging
-        if use_llm and needs_llm():
+    # 6. LLM tagging
+    if use_llm and needs_llm():
+        try:
+            df_movers = pd.DataFrame()
             try:
-                df_movers = pd.DataFrame()
+                from kr_stock.storage import get_daily_movers
+                conn_ro = init_db(db_path, read_only=True)
                 try:
-                    from kr_stock.storage import get_daily_movers
-                    df_movers = get_daily_movers(conn, date)
-                except Exception:
-                    pass
+                    df_movers = get_daily_movers(conn_ro, date)
+                finally:
+                    conn_ro.close()
+            except Exception:
+                pass
 
-                if not df_movers.empty:
-                    reasons = tag_significant_movers(df_movers)
-                    if reasons:
+            if not df_movers.empty:
+                reasons = tag_significant_movers(df_movers)
+                if reasons:
+                    conn_w = init_db(db_path)
+                    try:
                         from kr_stock.storage import upsert_stock_reasons as _upsert_reasons
-                        summary["tagged"] = _upsert_reasons(conn, date, reasons)
-                        logger.info(f"[{date}] {len(reasons)} Korean stocks tagged")
+                        summary["tagged"] = _upsert_reasons(conn_w, date, reasons)
+                    finally:
+                        conn_w.close()
+                    logger.info(f"[{date}] {len(reasons)} Korean stocks tagged")
 
-                    narratives = generate_market_narratives(df_movers)
-                    if narratives:
+                narratives = generate_market_narratives(df_movers)
+                if narratives:
+                    conn_w = init_db(db_path)
+                    try:
                         from kr_stock.storage import upsert_daily_narratives as _upsert_narr
-                        summary["narratives"] = _upsert_narr(conn, date, narratives)
-                        logger.info(f"[{date}] {len(narratives)} Korean market narratives generated")
-            except Exception as e:
-                err = f"LLM tagging failed: {e}"
-                summary["errors"].append(err)
-                logger.error(err)
-        elif use_llm:
-            logger.info(f"[{date}] LLM tagging skipped — no API key configured")
-
-    finally:
-        conn.close()
+                        summary["narratives"] = _upsert_narr(conn_w, date, narratives)
+                    finally:
+                        conn_w.close()
+                    logger.info(f"[{date}] {len(narratives)} Korean market narratives generated")
+        except Exception as e:
+            err = f"LLM tagging failed: {e}"
+            summary["errors"].append(err)
+            logger.error(err)
+    elif use_llm:
+        logger.info(f"[{date}] LLM tagging skipped — no API key configured")
 
     # Log the fetch
-    conn2 = init_db(db_path)
+    conn_log = init_db(db_path)
     try:
-        log_fetch(conn2, date, "success",
+        log_fetch(conn_log, date, "success",
                    listings_count=0,
                    prices_count=summary["prices"],
                    movers_count=summary["movers"],
@@ -652,7 +680,7 @@ def fetch_daily(date: str, use_llm: bool = True, db_path: Optional[str] = None) 
                    narratives=summary["narratives"],
                    errors="; ".join(summary["errors"]))
     finally:
-        conn2.close()
+        conn_log.close()
 
     return summary
 

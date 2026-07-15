@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KYP 智能盡調平台 | Sanakan Datahub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&family=Fira+Code:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/augmented-ui@2/augmented-ui.min.css">
+<style>
+  :root {
+    --void: #000000;
+    --megastructure: #060608;
+    --steel: #0c0e12;
+    --steel2: #111318;
+    --conduit: #1a1d26;
+    --conduit-lit: #252a36;
+    --safeguard: #d8d8d8;
+    --safeguard-dim: #888c94;
+    --datastream: #06b6d4;
+    --datastream-dim: rgba(6,182,212,0.15);
+    --datastream-glow: rgba(6,182,212,0.4);
+    --terminal: #4ade80;
+    --terminal-dim: rgba(74,222,128,0.15);
+    --alert: #ef4444;
+    --alert-dim: rgba(239,68,68,0.12);
+    --amber: #f59e0b;
+    --amber-dim: rgba(245,158,11,0.15);
+    --purple: #a78bfa;
+    --purple-dim: rgba(167,139,250,0.15);
+    --font-display: 'Rajdhani', 'Noto Sans TC', sans-serif;
+    --font-body: 'Noto Sans TC', -apple-system, sans-serif;
+    --font-mono: 'Fira Code', monospace;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--void);
+    color: var(--safeguard);
+    font-family: var(--font-body);
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body::after {
+    content: '';
+    position: fixed; top:0; left:0; width:100%; height:100%;
+    pointer-events: none; z-index: 99999;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.018) 2px,
+      rgba(0,0,0,0.018) 4px
+    );
+  }
+
+  .grid-section {
+    background-image:
+      linear-gradient(rgba(6,182,212,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(6,182,212,0.025) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+
+  .container { max-width:1120px; margin:0 auto; padding:0 28px; }
+
+  .aug-card {
+    --augmented-ui: tl-clip br-clip exe;
+    --aug-tl: 12px; --aug-br: 12px;
+    --aug-border-bg: var(--conduit-lit);
+    --aug-border-all: 1px;
+    background: var(--steel);
+    padding: 28px;
+    position: relative;
+  }
+  .aug-card-cyan { --aug-border-bg: var(--datastream-dim); --aug-border-all: 1px; }
+  .aug-card-alert { --aug-border-bg: var(--alert-dim); --aug-border-all: 1px; }
+
+  .hero {
+    background: var(--void);
+    position: relative;
+    padding: 100px 28px 120px;
+    text-align: center;
+    overflow: hidden;
+    border-bottom: 1px solid var(--conduit);
+  }
+  .hero::before {
+    content: '';
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 800px 300px at 50% 20%, rgba(6,182,212,0.06) 0%, transparent 70%),
+      radial-gradient(ellipse 400px 600px at 80% 80%, rgba(6,182,212,0.03) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero-geo { position: absolute; pointer-events: none; }
+  .hero-geo-1 { top: 60px; left: -40px; width: 200px; height: 1px; background: linear-gradient(90deg, transparent, var(--datastream-dim), transparent); transform: rotate(-15deg); }
+  .hero-geo-2 { bottom: 80px; right: -20px; width: 160px; height: 1px; background: linear-gradient(90deg, transparent, rgba(6,182,212,0.12), transparent); transform: rotate(20deg); }
+  .hero-geo-3 { top: 140px; right: 60px; width: 1px; height: 100px; background: linear-gradient(0deg, transparent, rgba(6,182,212,0.08), transparent); }
+  .hero-geo-4 { bottom: 40px; left: 25%; width: 300px; height: 1px; background: linear-gradient(90deg, transparent, rgba(6,182,212,0.06), transparent); }
+
+  .hero-title {
+    font-family: var(--font-display);
+    font-size: clamp(2rem, 5vw, 3.4rem);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.15;
+    position: relative;
+    z-index: 1;
+  }
+  .hero-title .line1 { display: block; color: var(--safeguard); }
+  .hero-title .line2 {
+    display: block;
+    background: linear-gradient(135deg, var(--datastream) 0%, #22d3ee 40%, var(--datastream) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: none;
+    filter: drop-shadow(0 0 18px rgba(6,182,212,0.35));
+  }
+  .hero-sub {
+    color: var(--safeguard-dim);
+    font-size: 1.05rem;
+    max-width: 660px;
+    margin: 20px auto 0;
+    position: relative;
+    z-index: 1;
+  }
+
+  .hero-badges {
+    display: flex; flex-wrap: wrap; gap: 2px; justify-content: center;
+    margin-top: 40px; position: relative; z-index: 1;
+  }
+  .hero-badge {
+    --augmented-ui: tl-clip br-clip exe;
+    --aug-tl: 8px; --aug-br: 8px;
+    --aug-border-bg: var(--conduit-lit);
+    --aug-border-all: 1px;
+    background: var(--steel);
+    padding: 14px 22px;
+    min-width: 130px;
+  }
+  .hero-badge .val {
+    font-family: var(--font-mono);
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--datastream);
+    text-shadow: 0 0 10px rgba(6,182,212,0.3);
+  }
+  .hero-badge .lbl {
+    font-size: 0.7rem;
+    color: var(--safeguard-dim);
+    letter-spacing: 0.04em;
+    margin-top: 2px;
+  }
+
+  section { padding: 90px 0; position: relative; }
+  section.alt { background: var(--megastructure); }
+
+  .sec-tag {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    color: var(--datastream);
+    text-transform: uppercase;
+    display: inline-block;
+    margin-bottom: 10px;
+    text-shadow: 0 0 6px rgba(6,182,212,0.25);
+  }
+  .sec-tag::before { content: '['; color: var(--safeguard-dim); }
+  .sec-tag::after { content: ']'; color: var(--safeguard-dim); }
+
+  h2 {
+    font-family: var(--font-display);
+    font-size: clamp(1.6rem, 3.5vw, 2.2rem);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin-bottom: 14px;
+    color: var(--safeguard);
+  }
+  .sec-intro {
+    color: var(--safeguard-dim);
+    font-size: 1rem;
+    max-width: 720px;
+    margin-bottom: 40px;
+  }
+
+  .jp-marker {
+    position: absolute;
+    top: 80px;
+    right: 20px;
+    font-family: 'Noto Sans TC', sans-serif;
+    writing-mode: vertical-rl;
+    font-size: 4rem;
+    font-weight: 700;
+    color: rgba(6,182,212,0.04);
+    pointer-events: none;
+    user-select: none;
+    letter-spacing: 0.2em;
+  }
+
+  .grid { display:grid; gap:16px; }
+  .grid-2 { grid-template-columns:repeat(auto-fit,minmax(440px,1fr)); }
+  .grid-3 { grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); }
+  .grid-4 { grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); }
+
+  .pain-card {
+    --augmented-ui: tr-clip exe;
+    --aug-tr: 16px;
+    --aug-border-bg: var(--alert-dim);
+    --aug-border-all: 1px;
+    background: var(--steel);
+    padding: 26px;
+    border-left: 2px solid var(--alert);
+  }
+  .pain-card h3 { color: var(--alert); font-family: var(--font-display); font-size: 1.15rem; margin-bottom: 8px; }
+  .pain-card p { color: var(--safeguard-dim); font-size: 0.9rem; }
+
+  .sol-card {
+    background: var(--steel);
+    border: 1px solid var(--conduit);
+    padding: 32px 24px;
+    text-align: center;
+    position: relative;
+  }
+  .sol-card .ico { font-size: 2.2rem; margin-bottom: 12px; display:block; }
+  .sol-card h3 {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--datastream);
+    margin-bottom: 8px;
+    text-shadow: 0 0 8px rgba(6,182,212,0.15);
+  }
+  .sol-card p { color: var(--safeguard-dim); font-size: 0.85rem; line-height: 1.6; }
+
+  .reg-card {
+    --augmented-ui: tl-clip br-clip exe;
+    --aug-tl: 12px; --aug-br: 12px;
+    --aug-border-bg: var(--conduit-lit);
+    --aug-border-all: 1px;
+    background: var(--steel);
+    padding: 26px;
+  }
+  .reg-card h3 {
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--datastream);
+    margin-bottom: 6px;
+  }
+  .reg-card .sub { color: var(--safeguard-dim); font-size: 0.82rem; margin-bottom: 12px; }
+  .reg-card ul { list-style:none; }
+  .reg-card li { color: var(--safeguard-dim); font-size: 0.88rem; padding: 3px 0; padding-left: 16px; position:relative; }
+  .reg-card li::before { content:'\25B8'; color: var(--datastream); position:absolute; left:0; font-size:0.7rem; top:5px; }
+
+  .stat-term {
+    background: var(--steel);
+    border: 1px solid var(--conduit);
+    padding: 22px 18px;
+    text-align: center;
+  }
+  .stat-term .val {
+    font-family: var(--font-mono);
+    font-size: 2.2rem;
+    font-weight: 600;
+    color: var(--datastream);
+    text-shadow: 0 0 12px rgba(6,182,212,0.25);
+  }
+  .stat-term .val.green { color: var(--terminal); text-shadow: 0 0 12px rgba(74,222,128,0.25); }
+  .stat-term .lbl {
+    font-size: 0.78rem;
+    color: var(--safeguard-dim);
+    margin-top: 4px;
+    letter-spacing: 0.03em;
+  }
+
+  table {
+    width:100%; border-collapse:collapse; font-size:0.88rem;
+    font-family: var(--font-body);
+  }
+  th {
+    text-align:left; padding:10px 14px;
+    background: var(--steel2);
+    font-family: var(--font-display);
+    font-weight:600; font-size:0.82rem;
+    color: var(--datastream);
+    letter-spacing: 0.05em;
+    border-bottom: 2px solid var(--conduit-lit);
+    text-transform: uppercase;
+  }
+  td { padding:10px 14px; border-bottom:1px solid var(--conduit); color: var(--safeguard-dim); }
+  tr:hover td { background: rgba(6,182,212,0.02); }
+
+  .tag {
+    display:inline-block; padding:2px 10px; font-size:0.7rem;
+    font-family: var(--font-mono); font-weight:500;
+    letter-spacing:0.04em;
+  }
+  .tag-g { background:var(--terminal-dim); color:var(--terminal); }
+  .tag-b { background:var(--datastream-dim); color:var(--datastream); }
+  .tag-a { background:var(--amber-dim); color:var(--amber); }
+  .tag-r { background:var(--alert-dim); color:var(--alert); }
+
+  .factor-list { margin:20px 0; }
+  .factor-row {
+    display:flex; align-items:center; gap:14px;
+    padding:8px 0; border-bottom:1px solid var(--conduit);
+  }
+  .factor-row:last-child { border-bottom:none; }
+  .factor-name { width:160px; font-size:0.85rem; flex-shrink:0; color: var(--safeguard-dim); }
+  .factor-w { width:50px; text-align:right; font-family: var(--font-mono); font-size:0.78rem; color: var(--safeguard-dim); flex-shrink:0; }
+  .factor-bar-wrap { flex:1; height:18px; background: var(--conduit); position:relative; overflow:hidden; }
+  .factor-bar {
+    height:100%;
+    background: linear-gradient(90deg, var(--datastream), #22d3ee);
+    display:flex; align-items:center; justify-content:flex-end;
+    padding-right:8px;
+    font-family: var(--font-mono); font-size:0.68rem; font-weight:600;
+    color: var(--void);
+    min-width:44px;
+  }
+  .factor-ent { width:56px; text-align:right; font-family: var(--font-mono); font-size:0.78rem; color: var(--terminal); flex-shrink:0; }
+
+  .flow {
+    display:flex; flex-wrap:wrap; gap:6px; align-items:center;
+    margin:24px 0; padding:20px 24px;
+    background: var(--steel); border: 1px solid var(--conduit);
+    overflow-x:auto;
+  }
+  .flow-node {
+    --augmented-ui: tl-clip br-clip exe;
+    --aug-tl: 6px; --aug-br: 6px;
+    --aug-border-bg: var(--conduit-lit);
+    --aug-border-all: 1px;
+    background: var(--steel2);
+    padding:8px 14px; font-size:0.78rem; white-space:nowrap;
+    font-family: var(--font-mono); color: var(--datastream);
+  }
+  .flow-arrow { color: var(--safeguard-dim); font-weight:700; }
+
+  .old-workflow {
+    --augmented-ui: tl-clip exe;
+    --aug-tl: 16px;
+    --aug-border-bg: var(--alert-dim);
+    --aug-border-all: 1px;
+    background: var(--steel);
+    border-left: 2px solid var(--alert);
+    padding: 28px;
+    opacity: 0.85;
+  }
+  .new-workflow {
+    --augmented-ui: br-clip exe;
+    --aug-br: 16px;
+    --aug-border-bg: var(--datastream-dim);
+    --aug-border-all: 1px;
+    background: var(--steel);
+    border-left: 2px solid var(--datastream);
+    padding: 28px;
+    box-shadow: 0 0 20px rgba(6,182,212,0.05);
+  }
+  .old-workflow h3 { font-family: var(--font-display); color: var(--alert); margin-bottom: 16px; }
+  .new-workflow h3 { font-family: var(--font-display); color: var(--datastream); margin-bottom: 16px; text-shadow: 0 0 10px rgba(6,182,212,0.2); }
+
+  .wf-step { display:flex; gap:12px; margin:10px 0; align-items:baseline; }
+  .wf-step .idx { font-family:var(--font-mono); font-size:0.78rem; color:var(--safeguard-dim); min-width:22px; }
+  .wf-step .desc { font-size:0.88rem; color:var(--safeguard-dim); }
+  .wf-step .desc small { color: var(--safeguard-dim); opacity:0.6; display:block; font-size:0.75rem; margin-top:2px; }
+  .wf-total { margin-top:14px; font-family:var(--font-display); font-size:1rem; font-weight:600; }
+
+  .price-card {
+    --augmented-ui: tl-clip br-clip exe;
+    --aug-tl: 14px; --aug-br: 14px;
+    --aug-border-bg: var(--conduit-lit);
+    --aug-border-all: 1px;
+    background: var(--steel);
+    padding: 36px 32px;
+    text-align: center;
+    position: relative;
+  }
+  .price-card.featured {
+    --aug-border-bg: var(--datastream);
+    --aug-border-all: 1px;
+    box-shadow: 0 0 30px rgba(6,182,212,0.08);
+  }
+  .price-rec {
+    position:absolute; top:-16px; left:50%; transform:translateX(-50%);
+    background: var(--datastream); color: var(--void);
+    padding:4px 18px;
+    font-family: var(--font-mono); font-size:0.7rem; font-weight:600;
+    letter-spacing: 0.06em;
+    --augmented-ui: tl-clip br-clip exe;
+    --aug-tl: 5px; --aug-br: 5px;
+  }
+  .price-card h3 { font-family: var(--font-display); font-size: 1.3rem; font-weight: 600; }
+  .price-card .amt {
+    font-family: var(--font-mono);
+    font-size: 2.2rem; font-weight: 600;
+    color: var(--datastream);
+    margin: 14px 0 4px;
+    text-shadow: 0 0 12px rgba(6,182,212,0.2);
+  }
+  .price-card .unit { color:var(--safeguard-dim); font-size:0.82rem; margin-bottom:20px; }
+  .price-card ul { text-align:left; list-style:none; margin:0 0 24px; }
+  .price-card li { padding:5px 0; color:var(--safeguard-dim); font-size:0.85rem; }
+  .price-card li::before { content:'\2713'; color:var(--terminal); font-weight:700; margin-right:8px; }
+
+  .btn {
+    display:inline-block; padding:12px 32px;
+    font-family: var(--font-display); font-size:0.9rem; font-weight:600;
+    letter-spacing: 0.04em; text-decoration:none; cursor:pointer;
+    transition: all 0.2s;
+    --augmented-ui: tl-clip br-clip exe;
+    --aug-tl: 8px; --aug-br: 8px;
+  }
+  .btn-primary {
+    --aug-border-bg: var(--datastream);
+    --aug-border-all: 1px;
+    background: rgba(6,182,212,0.1);
+    color: var(--datastream);
+  }
+  .btn-primary:hover {
+    background: rgba(6,182,212,0.2);
+    box-shadow: 0 0 20px rgba(6,182,212,0.2);
+  }
+  .btn-ghost {
+    --aug-border-bg: var(--conduit-lit);
+    --aug-border-all: 1px;
+    background: transparent;
+    color: var(--safeguard);
+  }
+  .btn-ghost:hover { background: rgba(255,255,255,0.03); }
+
+  details {
+    margin:10px 0;
+    border: 1px solid var(--conduit);
+    background: var(--steel);
+  }
+  details summary {
+    cursor:pointer; font-weight:500; font-size:0.95rem;
+    padding:14px 18px;
+    color: var(--safeguard);
+    list-style:none;
+    display:flex; align-items:center; gap:10px;
+  }
+  details summary::-webkit-details-marker { display:none; }
+  details summary::before {
+    content:'[+]'; font-family:var(--font-mono); font-size:0.78rem;
+    color: var(--datastream); min-width:30px;
+  }
+  details[open] summary::before { content:'[-]'; }
+  details .content { padding:0 18px 18px; }
+  details .content p { color: var(--safeguard-dim); font-size:0.88rem; }
+
+  .io-divider {
+    height: 2px; margin: 0;
+    border: none;
+    background: linear-gradient(90deg, transparent, var(--conduit-lit), transparent);
+    position: relative;
+  }
+  .io-divider::after {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 8px; height: 8px;
+    background: var(--datastream);
+    box-shadow: 0 0 10px rgba(6,182,212,0.4);
+    --augmented-ui: tl-clip br-clip exe;
+    --aug-tl: 2px; --aug-br: 2px;
+  }
+
+  .footer {
+    background: var(--void);
+    border-top: 1px solid var(--conduit);
+    text-align: center;
+    padding: 48px 24px;
+    position: relative;
+  }
+  .footer .brand {
+    font-family: var(--font-display);
+    font-size: 1.2rem; font-weight: 700;
+    color: var(--safeguard);
+    letter-spacing: 0.06em;
+  }
+  .footer .brand span { color: var(--datastream); }
+  .footer p { color: var(--safeguard-dim); font-size:0.82rem; margin-top:8px; }
+  .footer .easter-egg {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: rgba(6,182,212,0.12);
+    margin-top: 20px;
+    letter-spacing: 0.12em;
+  }
+
+  @media (max-width:768px) {
+    .grid-2 { grid-template-columns:1fr; }
+    .hero { padding: 60px 20px 80px; }
+    .hero-badge { min-width:100px; padding:10px 14px; }
+    .hero-badge .val { font-size:1.2rem; }
+    .jp-marker { display:none; }
+    .factor-name { width:120px; font-size:0.75rem; }
+  }
+
+  @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0; } }
+  .cursor { display:inline-block; animation:blink 1.2s step-end infinite; color:var(--datastream); }
+
+  @keyframes glitch {
+    0% { text-shadow: 2px 0 var(--alert), -1px 0 var(--datastream); }
+    25% { text-shadow: -1px 0 var(--alert), 2px 0 var(--datastream); }
+    50% { text-shadow: 1px 0 var(--datastream), -2px 0 var(--alert); }
+    100% { text-shadow: -2px 0 var(--datastream), 1px 0 var(--alert); }
+  }
+  .glitch-hover:hover { animation: glitch 0.3s ease-in-out; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════ HERO ═══════════ -->
+<div class="hero">
+  <div class="hero-geo hero-geo-1"></div>
+  <div class="hero-geo hero-geo-2"></div>
+  <div class="hero-geo hero-geo-3"></div>
+  <div class="hero-geo hero-geo-4"></div>
+
+  <h1 class="hero-title">
+    <span class="line1">KYP 智能盡職審查平台</span>
+    <span class="line2">香港基金盡調 · 全自動化</span>
+  </h1>
+  <p class="hero-sub">覆蓋 2,021 隻證監會認可基金 · 18 因子管理人 DD 評級 · 10 維度 KYP 引擎 · 50+ 數據採集器 · Sanakan Datahub 出品</p>
+
+  <div class="hero-badges">
+    <div class="hero-badge"><div class="val">2,021</div><div class="lbl">證監會認可基金</div></div>
+    <div class="hero-badge"><div class="val">2,478</div><div class="lbl">第 9 類持牌管理人</div></div>
+    <div class="hero-badge"><div class="val">444K</div><div class="lbl">NAV 淨值記錄</div></div>
+    <div class="hero-badge"><div class="val">2,231</div><div class="lbl">私募 OFC</div></div>
+    <div class="hero-badge"><div class="val">18</div><div class="lbl">評級因子</div></div>
+    <div class="hero-badge"><div class="val">50+</div><div class="lbl">數據採集器</div></div>
+  </div>
+</div>
+
+<hr class="io-divider">
+
+<!-- ═══════════ 市場痛點 ═══════════ -->
+<section class="grid-section">
+  <div class="container">
+    <span class="sec-tag">pain_points</span>
+    <h2>KYP 合規：行業瓶頸</h2>
+    <p class="sec-intro">證監會《操守準則》第 5.1A 條及第 5.5 條要求中介人對基金產品進行嚴格盡職審查。傳統人手 KYP 流程根本無法規模化。</p>
+
+    <div class="grid grid-2">
+      <div class="pain-card">
+        <h3>SYS.ERR：數據碎片化</h3>
+        <p>基金文件散落於 50+ 個管理人網站、證監會註冊冊、交易所公告之中。人手逐家下載、比對、錄入，<strong>單隻基金 KYP 耗時 2 至 4 小時</strong>，覆蓋整個產品貨架需要數月時間。</p>
+      </div>
+      <div class="pain-card">
+        <h3>SYS.ERR：評級缺乏一致性</h3>
+        <p>不同 RM 對同一管理人可能得出截然不同的盡調結論。沒有標準化評分框架，<strong>合規審計追蹤根本不存在</strong>，證監會檢查時難以自辯。</p>
+      </div>
+      <div class="pain-card">
+        <h3>SYS.ERR：監控盲點</h3>
+        <p>KYP 不是一次性工作。NAV 變動、管理人違規、基金文件更新均需持續追蹤。人手監控<strong>容易遺漏重大事件</strong>，引發監管風險。</p>
+      </div>
+      <div class="pain-card">
+        <h3>SYS.ERR：複雜產品分類困難</h3>
+        <p>第 5.5 條列出 14 類複雜產品，第 5.1A 條識別 71 隻衍生基金產品。人手逐隻判斷基金是否落入複雜或衍生產品的定義，<strong>容易出錯</strong>且效率極低。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 解決方案 ═══════════ -->
+<section class="alt">
+  <div class="container" style="position:relative;">
+    <div class="jp-marker">自動化</div>
+    <span class="sec-tag">solution</span>
+    <h2>自動化 KYP 引擎：全流程覆蓋</h2>
+    <p class="sec-intro">一個平台，打通基金 KYP 的完整工作流：數據自動採集、10 維度盡調評分、18 因子管理人量化評級、監管合規狀態實時追蹤。</p>
+
+    <div class="grid grid-4" style="margin-top:36px;">
+      <div class="sol-card">
+        <span class="ico">&#9654;</span>
+        <h3>自動採集</h3>
+        <p>50+ 管理人網站爬蟲。每日自動更新 NAV。證監會執法記錄同步。ISIN 至 NAV 回填管線。</p>
+      </div>
+      <div class="sol-card">
+        <span class="ico">&#9670;</span>
+        <h3>10 維 KYP</h3>
+        <p>產品性質、交易對手、託管安排、估值方法、流動性、利益衝突、披露、監督、合規、審計。</p>
+      </div>
+      <div class="sol-card">
+        <span class="ico">&#9644;</span>
+        <h3>18 因子評級</h3>
+        <p>Broker 18I 管理人 DD 模板。五檔 F1 至 F5 量化評級。全部因子熵值大於 0.5。權重可自訂。</p>
+      </div>
+      <div class="sol-card">
+        <span class="ico">&#9632;</span>
+        <h3>一鍵報告</h3>
+        <p>管理人盡調報告。基金風險評級。複雜產品判定。完整審計追蹤及評分依據。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="io-divider">
+
+<!-- ═══════════ 監管對標 ═══════════ -->
+<section class="grid-section">
+  <div class="container" style="position:relative;">
+    <div class="jp-marker">規制</div>
+    <span class="sec-tag">regulatory_alignment</span>
+    <h2>精準對標證監會監管框架</h2>
+    <p class="sec-intro">KYP 框架嚴格參照證監會最新監管指引設計。每個評分維度均對應具體監管要求。</p>
+
+    <div class="grid grid-2">
+      <div class="reg-card">
+        <h3>《操守準則》第 5.1A 條</h3>
+        <div class="sub">衍生產品識別及額外盡調義務</div>
+        <ul>
+          <li>自動識別 NDE 大於 50% 的衍生基金</li>
+          <li>覆蓋證監會列明的全部 71 隻衍生基金產品</li>
+          <li>結構性產品、合成 ETF、槓桿及反向產品分類</li>
+          <li>逐產品標記是否落入複雜產品定義</li>
+        </ul>
+      </div>
+      <div class="reg-card">
+        <h3>《操守準則》第 5.5 條</h3>
+        <div class="sub">複雜產品銷售額外規定</div>
+        <ul>
+          <li>14 類複雜產品自動分類</li>
+          <li>逐產品風險標記及合規提示</li>
+          <li>銷售文件額外披露要求提示</li>
+        </ul>
+      </div>
+      <div class="reg-card">
+        <h3>證監會產品盡職審查指引</h3>
+        <div class="sub">產品盡職審查框架</div>
+        <ul>
+          <li>10 維度 KYP 評估：產品性質、對手方風險、託管安排、估值、流動性、利益衝突、披露、持續監督、合規記錄、審計安排</li>
+          <li>每個維度獨立評分及發現記錄</li>
+        </ul>
+      </div>
+      <div class="reg-card">
+        <h3>證監會管理人盡調期望</h3>
+        <div class="sub">基金管理人盡職審查標準</div>
+        <ul>
+          <li>18 因子 Broker DD 模板：管理規模、合規記錄、風控體系、機構聲譽等</li>
+          <li>內部管控五檔評分（穩健 → 不足）</li>
+          <li>覆蓋全港 2,478 家第 9 類持牌法團</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 數據覆蓋 ═══════════ -->
+<section class="alt">
+  <div class="container" style="position:relative;">
+    <div class="jp-marker">全覽</div>
+    <span class="sec-tag">system_scan</span>
+    <h2>香港基金市場全景數據</h2>
+    <p class="sec-intro">從公開市場基金到私募 OFC，從管理人牌照到執法記錄。一個平台，全局掌握。</p>
+
+    <div class="grid grid-4" style="margin-top:36px;">
+      <div class="stat-term"><div class="val">2,021</div><div class="lbl">活躍證監會認可基金</div></div>
+      <div class="stat-term"><div class="val green">2,231</div><div class="lbl">私募 OFC 子基金</div></div>
+      <div class="stat-term"><div class="val">2,478</div><div class="lbl">第 9 類持牌資產管理人</div></div>
+      <div class="stat-term"><div class="val green">692</div><div class="lbl">具備 ISIN 代碼基金</div></div>
+      <div class="stat-term"><div class="val">548</div><div class="lbl">覆蓋 NAV 歷史基金</div></div>
+      <div class="stat-term"><div class="val green">444K</div><div class="lbl">NAV 淨值數據點</div></div>
+    </div>
+
+    <div class="grid grid-3" style="margin-top:20px;">
+      <div class="aug-card aug-card-cyan">
+        <h3 style="font-family:var(--font-display);color:var(--datastream);margin-bottom:14px;">基金分類覆蓋</h3>
+        <table>
+          <tr><td>證監會認可基金</td><td style="text-align:right;font-family:var(--font-mono);font-weight:600;color:var(--datastream);">2,021</td></tr>
+          <tr><td>複雜產品（§5.5）</td><td style="text-align:right;font-family:var(--font-mono);font-weight:600;color:var(--amber);">8</td></tr>
+          <tr><td>衍生產品（§5.1A）</td><td style="text-align:right;font-family:var(--font-mono);font-weight:600;color:var(--amber);">70</td></tr>
+          <tr><td>公募 OFC</td><td style="text-align:right;font-family:var(--font-mono);font-weight:600;color:var(--datastream);">154</td></tr>
+          <tr><td>私募 OFC</td><td style="text-align:right;font-family:var(--font-mono);font-weight:600;color:var(--datastream);">2,231</td></tr>
+        </table>
+      </div>
+      <div class="aug-card aug-card-cyan">
+        <h3 style="font-family:var(--font-display);color:var(--datastream);margin-bottom:14px;">風險評級分佈</h3>
+        <table>
+          <tr><td><span class="tag tag-g">中低風險</span></td><td style="text-align:right;font-family:var(--font-mono);font-weight:600;color:var(--terminal);">1,987</td></tr>
+          <tr><td><span class="tag tag-a">中等風險</span></td><td style="text-align:right;font-family:var(--font-mono);font-weight:600;color:var(--amber);">34</td></tr>
+        </table>
+        <p style="margin-top:14px;font-size:0.75rem;color:var(--safeguard-dim);">證監會認可基金 100% 覆蓋</p>
+      </div>
+      <div class="aug-card aug-card-cyan">
+        <h3 style="font-family:var(--font-display);color:var(--datastream);margin-bottom:14px;">管理人 DD 評級分佈</h3>
+        <table>
+          <tr><td>F1 · 優秀</td><td style="text-align:right;font-family:var(--font-mono);color:var(--terminal);">0.2%</td><td><span class="tag tag-g">極低風險</span></td></tr>
+          <tr><td>F2 · 良好</td><td style="text-align:right;font-family:var(--font-mono);color:var(--datastream);">6.9%</td><td><span class="tag tag-b">低風險</span></td></tr>
+          <tr><td>F3 · 中等</td><td style="text-align:right;font-family:var(--font-mono);color:var(--amber);">54.5%</td><td><span class="tag tag-a">中等</span></td></tr>
+          <tr><td>F4 · 關注</td><td style="text-align:right;font-family:var(--font-mono);color:var(--amber);">28.3%</td><td><span class="tag tag-a">需關注</span></td></tr>
+          <tr><td>F5 · 高風險</td><td style="text-align:right;font-family:var(--font-mono);color:var(--alert);">10.1%</td><td><span class="tag tag-r">高風險</span></td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="io-divider">
+
+<!-- ═══════════ 評級引擎 ═══════════ -->
+<section class="grid-section">
+  <div class="container" style="position:relative;">
+    <div class="jp-marker">評価</div>
+    <span class="sec-tag">rating_engine</span>
+    <h2>18 因子管理人 DD：Broker 18I 模板</h2>
+    <p class="sec-intro">全部 18 個因子熵值均達 0.5 以上。每個因子都能有效區分不同質素的管理人。評分邏輯完全透明、可審計。</p>
+
+    <div class="aug-card aug-card-cyan" style="margin-top:24px;">
+      <div class="factor-list">
+        <div class="factor-row" style="border-bottom:2px solid var(--conduit-lit);">
+          <span class="factor-name" style="color:var(--datastream);font-weight:600;">因子名稱</span>
+          <span class="factor-w" style="color:var(--datastream);font-weight:600;">權重</span>
+          <div class="factor-bar-wrap" style="background:transparent;"></div>
+          <span class="factor-ent" style="color:var(--datastream);font-weight:600;">熵值</span>
+        </div>
+        <div class="factor-row">
+          <span class="factor-name">管理規模</span><span class="factor-w">0.12</span>
+          <div class="factor-bar-wrap"><div class="factor-bar" style="width:67%;">0.670</div></div>
+          <span class="factor-ent">0.670</span>
+        </div>
+        <div class="factor-row">
+          <span class="factor-name">機構聲譽</span><span class="factor-w">0.08</span>
+          <div class="factor-bar-wrap"><div class="factor-bar" style="width:85%;">0.845</div></div>
+          <span class="factor-ent">0.845</span>
+        </div>
+        <div class="factor-row">
+          <span class="factor-name">分銷渠道</span><span class="factor-w">0.07</span>
+          <div class="factor-bar-wrap"><div class="factor-bar" style="width:83%;">0.825</div></div>
+          <span class="factor-ent">0.825</span>
+        </div>
+        <div class="factor-row">
+          <span class="factor-name">投資者構成</span><span class="factor-w">0.03</span>
+          <div class="factor-bar-wrap"><div class="factor-bar" style="width:82%;">0.824</div></div>
+          <span class="factor-ent">0.824</span>
+        </div>
+        <div class="factor-row">
+          <span class="factor-name">風控體系</span><span class="factor-w">0.08</span>
+          <div class="factor-bar-wrap"><div class="factor-bar" style="width:72%;">0.721</div></div>
+          <span class="factor-ent">0.721</span>
+        </div>
+        <div class="factor-row">
+          <span class="factor-name">監管處罰</span><span class="factor-w">0.08</span>
+          <div class="factor-bar-wrap"><div class="factor-bar" style="width:56%;">0.555</div></div>
+          <span class="factor-ent">0.555</span>
+        </div>
+        <div class="factor-row">
+          <span class="factor-name">規模增長</span><span class="factor-w">0.05</span>
+          <div class="factor-bar-wrap"><div class="factor-bar" style="width:53%;">0.525</div></div>
+          <span class="factor-ent">0.525</span>
+        </div>
+        <div class="factor-row" style="color:var(--safeguard-dim);">
+          <span class="factor-name" style="font-weight:400;">+ 其餘 10 個因子</span><span class="factor-w">0.49</span>
+          <div class="factor-bar-wrap" style="background:transparent;"></div>
+          <span class="factor-ent" style="color:var(--terminal);">全部 &ge; 0.5</span>
+        </div>
+      </div>
+    </div>
+
+    <p style="margin-top:18px;font-size:0.8rem;color:var(--safeguard-dim);font-family:var(--font-mono);">
+      # 標準化香農熵值（0 至 1）衡量因子評分區分度。低於 0.3 = 無效因子。全部 18 因子高於 0.5 = 最大區分能力。
+    </p>
+  </div>
+</section>
+
+<!-- ═══════════ 10D KYP ═══════════ -->
+<section class="alt">
+  <div class="container" style="position:relative;">
+    <div class="jp-marker">尽調</div>
+    <span class="sec-tag">kyp_framework</span>
+    <h2>10 維度 KYP 盡調評估矩陣</h2>
+    <p class="sec-intro">對標國際基金盡調最佳實踐。從產品結構到持續監督，每個維度獨立評分並記錄。</p>
+
+    <div class="aug-card aug-card-cyan" style="margin-top:24px;">
+      <table>
+        <tr><th>#</th><th>盡調維度</th><th>評估範圍</th><th>狀態</th></tr>
+        <tr><td style="font-family:var(--font-mono);color:var(--datastream);">01</td><td><strong>產品性質</strong></td><td>基金結構、投資策略、資產類別、槓桿使用、複雜產品判定</td><td><span class="tag tag-g">已評分</span></td></tr>
+        <tr><td style="font-family:var(--font-mono);color:var(--datastream);">02</td><td><strong>交易對手風險</strong></td><td>掉期對手方、證券借貸對手方、抵押品管理、集中度風險</td><td><span class="tag tag-g">已評分</span></td></tr>
+        <tr><td style="font-family:var(--font-mono);color:var(--datastream);">03</td><td><strong>託管安排</strong></td><td>託管人資質、資產隔離、託管人監督機制</td><td><span class="tag tag-g">已評分</span></td></tr>
+        <tr><td style="font-family:var(--font-mono);color:var(--datastream);">04</td><td><strong>估值方法</strong></td><td>定價來源、公允價值層級、估值頻率、獨立驗證</td><td><span class="tag tag-g">已評分</span></td></tr>
+        <tr><td style="font-family:var(--font-mono);color:var(--datastream);">05</td><td><strong>流動性</strong></td><td>贖回頻率、贖回通知期、擺動定價、門控條款</td><td><span class="tag tag-g">已評分</span></td></tr>
+        <tr><td style="font-family:var(--font-mono);color:var(--datastream);">06</td><td><strong>利益衝突</strong></td><td>關聯交易、軟佣金安排、員工個人交易政策</td><td><span class="tag tag-g">已評分</span></td></tr>
+        <tr><td style="font-family:var(--font-mono);color:var(--datastream);">07</td><td><strong>披露質素</strong></td><td>KFS 完整性、年報時效性、費用透明度及披露充分性</td><td><span class="tag tag-g">已評分</span></td></tr>
+        <tr><td style="font-family:var(--font-mono);color:var(--datastream);">08</td><td><strong>持續監督</strong></td><td>觸發式審查機制、管理人變更通知、重大事件報告</td><td><span class="tag tag-g">已評分</span></td></tr>
+        <tr><td style="font-family:var(--font-mono);color:var(--datastream);">09</td><td><strong>合規記錄</strong></td><td>證監會執法記錄、紀律處分歷史、違規次數及嚴重程度</td><td><span class="tag tag-g">已評分</span></td></tr>
+        <tr><td style="font-family:var(--font-mono);color:var(--datastream);">10</td><td><strong>審計安排</strong></td><td>審計師資質、審計意見類型、審計報告時效性</td><td><span class="tag tag-g">已評分</span></td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<hr class="io-divider">
+
+<!-- ═══════════ 數據管線 ═══════════ -->
+<section class="grid-section">
+  <div class="container" style="position:relative;">
+    <div class="jp-marker">集積</div>
+    <span class="sec-tag">data_engine</span>
+    <h2>14 條自動化數據管線：每日更新</h2>
+    <p class="sec-intro">從源頭採集到評分輸出，全流程無需人手干預。</p>
+
+    <div class="flow">
+      <span class="flow-node">證監會公眾註冊冊</span>
+      <span class="flow-arrow">&#9654;</span>
+      <span class="flow-node">50+ 管理人網站</span>
+      <span class="flow-arrow">&#9654;</span>
+      <span class="flow-node">證監會執法公告</span>
+      <span class="flow-arrow">&#9654;</span>
+      <span class="flow-node">Webb-Site</span>
+      <span class="flow-arrow">&#9654;</span>
+      <span class="flow-node">維基百科</span>
+      <span class="flow-arrow">&#9654;</span>
+      <span class="flow-node">港交所</span>
+      <span class="flow-arrow">&#9654;</span>
+      <span class="flow-node">Yahoo Finance</span>
+      <span class="flow-arrow">&#9654;</span>
+      <span class="flow-node">WINGS</span>
+    </div>
+
+    <div class="grid grid-2" style="margin-top:24px;">
+      <div class="aug-card aug-card-cyan">
+        <h3 style="font-family:var(--font-display);color:var(--datastream);margin-bottom:12px;">基金數據管線</h3>
+        <ul style="list-style:none;font-size:0.85rem;color:var(--safeguard-dim);">
+          <li style="padding:4px 0;">&#9656; 基金列表採集 — 證監會註冊冊自動抓取 2,021 隻基金基本資料</li>
+          <li style="padding:4px 0;">&#9656; KFS 文件解析 — 自動提取費用、策略、風險等結構化數據</li>
+          <li style="padding:4px 0;">&#9656; NAV 回填 — Yahoo Finance ISIN 歷史淨值，累計 444K 條記錄</li>
+          <li style="padding:4px 0;">&#9656; 業績計算 — 從 NAV 自動計算 YTD/1M/3M/6M/1Y/3Y/5Y 回報</li>
+          <li style="padding:4px 0;">&#9656; ISIN 管理 — 多數據源交叉驗證 ISIN 代碼</li>
+          <li style="padding:4px 0;">&#9656; 份額類別 — 各幣種、對沖、派息類別自動追蹤</li>
+          <li style="padding:4px 0;">&#9656; 分紅記錄 — 除息日、派息日、金額、類型歷史數據</li>
+        </ul>
+      </div>
+      <div class="aug-card aug-card-cyan">
+        <h3 style="font-family:var(--font-display);color:var(--datastream);margin-bottom:12px;">管理人數據管線</h3>
+        <ul style="list-style:none;font-size:0.85rem;color:var(--safeguard-dim);">
+          <li style="padding:4px 0;">&#9656; 管理人採集 — 證監會持牌法團註冊冊，8,000+ 家持牌法團</li>
+          <li style="padding:4px 0;">&#9656; 50+ 網站爬蟲 — BlackRock、JPMorgan、HSBC、惠理等官網自動抓取</li>
+          <li style="padding:4px 0;">&#9656; AUM 估算 — 無公開 AUM 數據的管理人基於牌照組合、維基、成立年限估算</li>
+          <li style="padding:4px 0;">&#9656; Webb-Site 增強 — 公司成立日期、名稱變更歷史、網站資訊</li>
+          <li style="padding:4px 0;">&#9656; 維基百科增強 — 中英文維基條目，機構聲譽信號</li>
+          <li style="padding:4px 0;">&#9656; 執法記錄 — 證監會執法 API，紀律處分、罰款、牌照吊銷</li>
+          <li style="padding:4px 0;">&#9656; WINGS 探測 — 香港金融牌照整體狀況探查</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 效率對比 ═══════════ -->
+<section class="alt">
+  <div class="container" style="position:relative;">
+    <div class="jp-marker">効率</div>
+    <span class="sec-tag">efficiency</span>
+    <h2>KYP 工作流程：從 3.5 小時到 5 分鐘</h2>
+    <p class="sec-intro">傳統人手 KYP vs 平台自動化 KYP。效率提升 40 倍。</p>
+
+    <div class="grid grid-2" style="margin-top:28px;">
+      <div class="old-workflow">
+        <h3>[ LEGACY ] 傳統人手 KYP</h3>
+        <div class="wf-step"><span class="idx">01.</span><span class="desc">查找基金文件<small>KFS、發售章程、年報散落各處</small></span></div>
+        <div class="wf-step"><span class="idx">02.</span><span class="desc">提取關鍵數據<small>費用、策略、風險等級逐一錄入</small></span></div>
+        <div class="wf-step"><span class="idx">03.</span><span class="desc">管理人背景調查<small>證監會牌照查冊、執法記錄搜尋、AUM 查找</small></span></div>
+        <div class="wf-step"><span class="idx">04.</span><span class="desc">撰寫盡調報告<small>手動整理評級結論及依據</small></span></div>
+        <div class="wf-step"><span class="idx">05.</span><span class="desc">合規覆核<small>交叉檢查數據準確性</small></span></div>
+        <p class="wf-total" style="color:var(--alert);">合計：約 3.5 小時 / 每基金</p>
+      </div>
+
+      <div class="new-workflow">
+        <h3>[ SANAKAN ] 自動化 KYP</h3>
+        <div class="wf-step"><span class="idx">01.</span><span class="desc">搜尋基金名稱或 ISIN<small>全文搜尋，即時返回</small></span></div>
+        <div class="wf-step"><span class="idx">02.</span><span class="desc">系統自動展示結構化數據<small>KFS 已解析，費用策略已結構化存儲</small></span></div>
+        <div class="wf-step"><span class="idx">03.</span><span class="desc">18 因子評級 + 執法記錄<small>自動計算，每日更新</small></span></div>
+        <div class="wf-step"><span class="idx">04.</span><span class="desc">一鍵生成盡調報告<small>評級依據自動附加</small></span></div>
+        <div class="wf-step"><span class="idx">05.</span><span class="desc">系統驗證 + 審計追蹤<small>數據來源及評分邏輯完全透明</small></span></div>
+        <p class="wf-total" style="color:var(--terminal);">合計：約 5 分鐘 / 每基金 &nbsp; <span style="color:var(--datastream);">效率提升 40 倍</span></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="io-divider">
+
+<!-- ═══════════ 接入方式 ═══════════ -->
+<section class="grid-section">
+  <div class="container" style="position:relative;">
+    <div class="jp-marker">接続</div>
+    <span class="sec-tag">integration</span>
+    <h2>多種接入方式：適配任何工作場景</h2>
+    <p class="sec-intro">無論團隊習慣瀏覽器操作、API 對接內部系統、還是在 AI 助手內直接查詢，我們都有適配方䅁。</p>
+
+    <div class="grid grid-3" style="margin-top:28px;">
+      <div class="aug-card aug-card-cyan">
+        <div style="font-size:1.8rem;margin-bottom:12px;">&#9632;</div>
+        <h3 style="font-family:var(--font-display);color:var(--datastream);margin-bottom:8px;">Web 控制台</h3>
+        <p style="color:var(--safeguard-dim);font-size:0.88rem;margin-bottom:12px;">直觀的網頁界面，支援基金搜尋、管理人查詢、評級模板編輯、評級結果查看。適合 RM 及合規同事日常使用。</p>
+        <ul style="list-style:none;font-size:0.82rem;color:var(--safeguard-dim);">
+          <li>&#9656; 評級模板編輯器</li>
+          <li>&#9656; 管理人詳情 + 10 維 DD 評分</li>
+          <li>&#9656; NAV 走勢圖 + 業績指標</li>
+          <li>&#9656; 一鍵匯出評級報告</li>
+        </ul>
+      </div>
+      <div class="aug-card aug-card-cyan">
+        <div style="font-size:1.8rem;margin-bottom:12px;">&#9670;</div>
+        <h3 style="font-family:var(--font-display);color:var(--datastream);margin-bottom:8px;">REST API</h3>
+        <p style="color:var(--safeguard-dim);font-size:0.88rem;margin-bottom:12px;">標準 RESTful API，輕鬆對接內部系統：CRM、合規平台、交易系統。</p>
+        <ul style="list-style:none;font-size:0.82rem;color:var(--safeguard-dim);">
+          <li>&#9656; 40+ API 端點</li>
+          <li>&#9656; JSON 格式，標準 HTTP</li>
+          <li>&#9656; 支援 CORS 跨域調用</li>
+          <li>&#9656; Python/JS SDK 可用</li>
+        </ul>
+      </div>
+      <div class="aug-card aug-card-cyan">
+        <div style="font-size:1.8rem;margin-bottom:12px;">&#9654;</div>
+        <h3 style="font-family:var(--font-display);color:var(--datastream);margin-bottom:8px;">MCP / AI 助手</h3>
+        <p style="color:var(--safeguard-dim);font-size:0.88rem;margin-bottom:12px;">27 個 MCP 工具，讓 AI 助手直接查詢基金數據、計算評級、生成盡調意見。</p>
+        <ul style="list-style:none;font-size:0.82rem;color:var(--safeguard-dim);">
+          <li>&#9656; 自然語言查詢基金數據</li>
+          <li>&#9656; AI 輔助盡調分析</li>
+          <li>&#9656; 實時觸發評級計算</li>
+          <li>&#9656; Claude Code / IDE 整合</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 定價 ═══════════ -->
+<section class="alt">
+  <div class="container" style="position:relative;">
+    <div class="jp-marker">契約</div>
+    <span class="sec-tag">plans</span>
+    <h2>靈活定價：按需定制</h2>
+    <p class="sec-intro">根據貴司的產品貨架規模、用戶數量及整合深度，量身定制最適合的方䅁。</p>
+
+    <div class="grid grid-2" style="margin-top:32px;">
+      <div class="price-card">
+        <h3>標準版</h3>
+        <div class="amt">定制報價</div>
+        <div class="unit">年度訂閱</div>
+        <ul>
+          <li>全量基金數據庫（2,021 隻）</li>
+          <li>10 維度 KYP 盡調評分</li>
+          <li>18 因子管理人 DD 評級</li>
+          <li>Web 控制台訪問</li>
+          <li>每日數據更新</li>
+          <li>標準 API 訪問（QPS 限額）</li>
+          <li>電郵技術支援</li>
+        </ul>
+        <a href="#" class="btn btn-ghost">預約演示</a>
+      </div>
+      <div class="price-card featured">
+        <div class="price-rec">最受歡迎</div>
+        <h3 style="color:var(--datastream);">企業版</h3>
+        <div class="amt">定制報價</div>
+        <div class="unit">年度訂閱</div>
+        <ul>
+          <li>標準版全部功能</li>
+          <li>私募 OFC 數據（2,231 隻）</li>
+          <li>自訂評級模板（權重、閾值可調）</li>
+          <li>API 不限量訪問</li>
+          <li>MCP / AI 助手整合</li>
+          <li>專屬數據採集器定制開發</li>
+          <li>內網部署或私有雲選項</li>
+          <li>SLA 保障 + 專屬技術支援</li>
+        </ul>
+        <a href="#" class="btn btn-primary glitch-hover">預約演示</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="io-divider">
+
+<!-- ═══════════ FAQ ═══════════ -->
+<section class="grid-section">
+  <div class="container" style="position:relative;">
+    <span class="sec-tag">faq</span>
+    <h2>常見問題</h2>
+
+    <details>
+      <summary>數據來源是什麼？更新頻率如何？</summary>
+      <div class="content">
+        <p>數據來源包括：證監會公眾註冊冊（每日同步）、50+ 管理人官方網站（每日爬取）、Yahoo Finance（NAV 每日更新）、證監會執法公告（實時監控）、港交所（定期更新）、Webb-Site 及維基百科（每週更新）。核心數據每日自動刷新，全流程無需人手干預。</p>
+      </div>
+    </details>
+    <details>
+      <summary>評級模型是否支援定制？</summary>
+      <div class="content">
+        <p>完全支援。企業版用戶可創建自訂評級模板：調整 18 個因子的權重分配、修改評分閾值（F1 至 F5 邊界值）、選擇不同的評分函數。系統提供 6 套預設模板（包括 Broker 18I）作為起點。所有修改即時生效，歷史評級保留可追溯。</p>
+      </div>
+    </details>
+    <details>
+      <summary>如何確保數據準確性？</summary>
+      <div class="content">
+        <p>（1）多數據源交叉驗證：ISIN 從證監會註冊冊、管理人網站及 Yahoo Finance 三重比對。（2）所有自動解析結果保留原始文件連結，可人手覆核。（3）評級引擎的每項評分都有明確的來源欄位及計算邏輯，完全可審計。（4）數據更新時間戳透明展示。</p>
+      </div>
+    </details>
+    <details>
+      <summary>可以部署在內網嗎？</summary>
+      <div class="content">
+        <p>可以。企業版支援內網私有化部署，所有數據採集、存儲、API 服務部署在貴司內部伺服器上，數據不出企業網絡。亦支援私有雲部署（AWS、Azure、阿里雲）。</p>
+      </div>
+    </details>
+    <details>
+      <summary>覆蓋哪些基金類型？</summary>
+      <div class="content">
+        <p>覆蓋證監會認可的全部公募基金（2,021 隻），包括：股票基金、債券基金、混合基金、貨幣市場基金、ETF、結構性產品、槓桿及反向產品、合成 ETF，以及 154 隻公募 OFC 子基金。額外覆蓋 2,231 隻私募 OFC 及非認可基金（僅供專業投資者）。</p>
+      </div>
+    </details>
+  </div>
+</section>
+
+<!-- ═══════════ FOOTER ═══════════ -->
+<div class="footer">
+  <div class="brand">SANAKAN<span>//</span>DATAHUB</div>
+  <p>助力香港券商高效完成基金 KYP 盡職審查<span class="cursor">_</span></p>
+  <div class="easter-egg">Safeguard System v4.0 | Type 9 Target: 2478 | All Factors Entropy &gt; 0.5 | Status: OPERATIONAL</div>
+</div>
+
+</body>
+</html>

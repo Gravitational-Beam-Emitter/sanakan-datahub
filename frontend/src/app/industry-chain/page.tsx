@@ -37,10 +37,8 @@ export default function IndustryChainPage() {
         <p className="font-medium text-sm text-ink mb-2">数据说明</p>
         <p>
           产业链节点标注的公司为各环节全球主要参与者。公司后括号内为股票代码或当地市场代码。
-          所有财务数据（营收/利润）通过 yfinance 从 Yahoo Finance 获取，东财概念板块指数通过 AKShare 获取。
         </p>
         <p>
-          技术演进方向基于 OFC 2026、LightCounting、Cignal AI、Yole 等公开行业报告。
           数据仅供参考研究，不构成投资建议。
         </p>
       </div>

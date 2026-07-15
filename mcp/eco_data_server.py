@@ -298,6 +298,7 @@ _US_LIST_DB = os.path.join(os.path.dirname(os.path.dirname(__file__)), "us_listi
 _ANNO_DB = os.path.join(os.path.dirname(os.path.dirname(__file__)), "announcements", "announcements.duckdb")
 _KR_DB = os.path.join(os.path.dirname(os.path.dirname(__file__)), "kr_stock", "kr_stock.duckdb")
 _TW_DB = os.path.join(os.path.dirname(os.path.dirname(__file__)), "tw_stock", "tw_stock.duckdb")
+_HYNIX_DB = os.path.join(os.path.dirname(os.path.dirname(__file__)), "hynix", "hynix.duckdb")
 
 
 def _hk_conn():
@@ -327,6 +328,10 @@ def _kr_conn():
 
 def _tw_conn():
     return duckdb.connect(_TW_DB, read_only=True)
+
+
+def _hynix_conn():
+    return duckdb.connect(_HYNIX_DB, read_only=True)
 
 
 def _serialize_rows(rows, cols):
@@ -1743,6 +1748,126 @@ def tool_tw_stock_detail(code: str) -> dict:
         conn.close()
 
 
+# ── SK Hynix Cross-Market ─────────────────────────────────────
+
+
+def tool_hynix_arbitrage(date: str = "") -> dict:
+    """Get SK Hynix cross-market arbitrage comparison: premium/discount across KR stock, US ADR, HK ETP, and KR ETFs."""
+    conn = _hynix_conn()
+    try:
+        if not date:
+            row = conn.execute("SELECT MAX(date) FROM hynix_arbitrage").fetchone()
+            if not row or not row[0]:
+                return {"error": "No data"}
+            date = str(row[0])
+
+        rows = conn.execute("""
+            SELECT a.date, a.ticker, i.name, i.market, i.currency, i.instrument_type,
+                   i.leverage, a.price_local, a.price_krw, a.base_price_krw,
+                   a.nav_local, a.nav_krw, a.tracking_ratio_used,
+                   a.equivalent_krw_per_share, a.premium_pct, a.nav_premium_pct
+            FROM hynix_arbitrage a
+            JOIN hynix_instruments i ON a.ticker = i.ticker
+            WHERE a.date = ?
+            ORDER BY a.premium_pct DESC NULLS LAST
+        """, [date]).fetchall()
+
+        if not rows:
+            return {"error": f"No arbitrage data for {date}"}
+
+        fx_rows = conn.execute(
+            "SELECT from_ccy, to_ccy, rate FROM hynix_fx_rates WHERE date = ?", [date]
+        ).fetchall()
+        fx = {f"{r[0]}{r[1]}": r[2] for r in fx_rows}
+
+        instruments = []
+        for r in rows:
+            instruments.append({
+                "ticker": r[1], "name": r[2], "market": r[3], "currency": r[4],
+                "instrument_type": r[5], "leverage": r[6],
+                "price_local": r[7], "price_krw": r[8],
+                "nav_local": r[10], "nav_krw": r[11],
+                "tracking_ratio": r[12],
+                "equivalent_krw_per_share": r[13],
+                "premium_pct_vs_base": round(r[14], 2) if r[14] is not None else None,
+                "nav_premium_pct": round(r[15], 2) if r[15] is not None else None,
+            })
+
+        return {
+            "date": date,
+            "base_ticker": "000660.KS",
+            "base_price_krw": rows[0][9],
+            "fx_rates": fx,
+            "count": len(instruments),
+            "instruments": instruments,
+        }
+    finally:
+        conn.close()
+
+
+def tool_hynix_instruments(market: str = "") -> dict:
+    """List tracked SK Hynix instruments across markets (KR, US, HK)."""
+    conn = _hynix_conn()
+    try:
+        if market:
+            rows = conn.execute(
+                "SELECT ticker, name, market, currency, instrument_type, leverage, tracking_ratio, note "
+                "FROM hynix_instruments WHERE is_active = true AND market = ? ORDER BY market, ticker",
+                [market],
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT ticker, name, market, currency, instrument_type, leverage, tracking_ratio, note "
+                "FROM hynix_instruments WHERE is_active = true ORDER BY market, ticker",
+            ).fetchall()
+        return {
+            "count": len(rows),
+            "instruments": [
+                {"ticker": r[0], "name": r[1], "market": r[2], "currency": r[3],
+                 "instrument_type": r[4], "leverage": r[5],
+                 "tracking_ratio": r[6], "note": r[7]}
+                for r in rows
+            ],
+        }
+    finally:
+        conn.close()
+
+
+def tool_hynix_prices(ticker: str = "", date: str = "", limit: int = 30) -> dict:
+    """Get SK Hynix instrument price history. Leave ticker empty to get all instruments for a date."""
+    conn = _hynix_conn()
+    try:
+        if ticker:
+            rows = conn.execute("""
+                SELECT date, open, high, low, close, volume, nav, change_pct
+                FROM hynix_daily_prices WHERE ticker = ? ORDER BY date DESC LIMIT ?
+            """, [ticker, limit]).fetchall()
+            return {
+                "ticker": ticker,
+                "count": len(rows),
+                "prices": _serialize_rows(rows, ["date", "open", "high", "low", "close", "volume", "nav", "change_pct"]),
+            }
+        elif date:
+            rows = conn.execute("""
+                SELECT p.date, p.ticker, i.name, i.market, p.close, p.nav, p.change_pct
+                FROM hynix_daily_prices p
+                JOIN hynix_instruments i ON p.ticker = i.ticker
+                WHERE p.date = ?
+                ORDER BY i.market, p.ticker
+            """, [date]).fetchall()
+            return {
+                "date": date,
+                "count": len(rows),
+                "prices": [{"ticker": r[1], "name": r[2], "market": r[3],
+                            "close": r[4], "nav": r[5], "change_pct": r[6]}
+                           for r in rows],
+            }
+        else:
+            return {"error": "Provide ticker or date"}
+    finally:
+        conn.close()
+
+
 # ── Source metadata ──────────────────────────────────────────────
 
 SOURCE_META = {
@@ -1773,6 +1898,251 @@ SOURCE_META = {
     "name_screening": {"label": "Name Screening (中英文)", "provider": "OpenSanctions + GDELT + 阿里云法院", "key_required": False, "description": "名称筛查: OpenSanctions制裁+PEP数据库(440K+实体,含中文名), GDELT全球负面新闻, 阿里云信数科技中国法院涉诉(失信/被执行/裁判文书), 中英文模糊匹配+拼音跨文字搜索", "category": "name_screening"},
     "energy": {"label": "Energy / EIA",          "provider": "U.S. Energy Information Admin", "key_required": True,  "description": "WTI原油价格, Henry Hub天然气价格", "category": "macro"},
 }
+
+
+# ── Name Data & I Ching tool implementations ────────────────────
+
+_NAME_DB = os.path.join(os.path.dirname(os.path.dirname(__file__)), "name_data", "name_data.duckdb")
+
+
+def tool_name_score(surname: str, given_name: str, birth_year: int = 0,
+                    birth_month: int = 0, birth_day: int = 0, birth_hour: int = 12,
+                    gender: str = "男") -> dict:
+    """Score a Chinese name with full BaZi/WuGe/Sancai/Zodiac/Phonetic/Meaning analysis."""
+    from name_data.pipeline import score_name, calculate_wuge
+
+    kwargs = {"surname": surname, "given_name": given_name, "gender": gender}
+    if birth_year and birth_month and birth_day:
+        kwargs.update(birth_year=birth_year, birth_month=birth_month,
+                      birth_day=birth_day, birth_hour=birth_hour)
+
+    result = score_name(**kwargs)
+    return {
+        "total_score": result["scores"]["total"],
+        "verdict": result["verdict"],
+        "scores": result["scores"],
+        "wuge_grids": {k: {"number": v["number"], "element": v["element"],
+                           "ji_xiong": v["ji_xiong"], "summary": v["summary"]}
+                       for k, v in result["wuge"]["grids"].items()},
+        "sancai": result.get("sancai", {}),
+        "bazi": result.get("bazi", {}).get("pillars", {}),
+        "zodiac": result.get("zodiac", {}).get("details", []),
+        "phonetic": result.get("phonetic", {}).get("notes", []),
+    }
+
+
+def tool_name_bazi(year: int, month: int, day: int, hour: int = 12) -> dict:
+    """Calculate BaZi (八字) four pillars: year, month, day, hour."""
+    from name_data.pipeline import calculate_bazi
+    result = calculate_bazi(year, month, day, hour)
+    return {
+        "pillars": result["pillars"],
+        "day_master": result["day_master"],
+        "wuxing_count": result["wuxing_count"],
+        "favorable_element": result["favorable_element"],
+        "zodiac": result["zodiac"],
+    }
+
+
+def tool_name_wuge(surname: str, given_name: str) -> dict:
+    """Calculate Wu Ge (五格) stroke grids from Kangxi dictionary strokes."""
+    from name_data.pipeline import calculate_wuge
+    result = calculate_wuge(surname, given_name)
+    grids = {}
+    for k, v in result["grids"].items():
+        grids[k] = {"number": v["number"], "element": v["element"],
+                    "ji_xiong": v["ji_xiong"], "summary": v["summary"]}
+    return {
+        "grids": grids,
+        "surname_strokes": result["surname_strokes"],
+        "given_strokes": result["given_strokes"],
+    }
+
+
+def tool_iching_divine(method: str = "coins", a: int = 0, b: int = 0, c: int = 0) -> dict:
+    """I Ching hexagram divination. method='coins' for coin toss, 'numbers' for 3-number method.
+
+    For numbers: a=upper trigram(1-8), b=lower trigram(1-8), c=changing line(1-6).
+    """
+    from name_data.pipeline import divine_by_coins, divine_by_numbers
+
+    if method == "numbers" and a and b and c:
+        result = divine_by_numbers(a, b, c)
+    else:
+        result = divine_by_coins()
+
+    primary = result["primary"]
+    mutual = result.get("mutual", {})
+    changed = result.get("changed", {})
+
+    return {
+        "method": result["method"],
+        "primary_hexagram": {"id": primary["id"], "name": primary["name"],
+                              "judgment": primary["judgment"], "ji_xiong": primary["ji_xiong"],
+                              "description": primary["description"]} if primary else None,
+        "changing_lines": result.get("changing_lines", []),
+        "mutual_hexagram": {"id": mutual["id"], "name": mutual["name"],
+                             "ji_xiong": mutual["ji_xiong"]} if mutual else None,
+        "changed_hexagram": {"id": changed["id"], "name": changed["name"],
+                              "ji_xiong": changed["ji_xiong"]} if changed else None,
+    }
+
+
+def tool_calendar_ganzhi(date_str: str = "") -> dict:
+    """Get Chinese calendar (农历) info: year/month/day stem-branch (干支),
+    solar term (节气), zodiac (生肖), and day cycle index.
+
+    If date_str is empty, returns info for today.
+    Format: YYYY-MM-DD (e.g., 2025-06-15).
+    """
+    from datetime import date as dt_date
+    from name_data.calendar import gregorian_to_ganzhi
+    if date_str:
+        try:
+            d = dt_date.fromisoformat(date_str)
+        except ValueError:
+            return {"error": f"Invalid date: {date_str}. Use YYYY-MM-DD."}
+    else:
+        d = dt_date.today()
+    return gregorian_to_ganzhi(d)
+
+
+def tool_tuibei_consult(method: str = "random", hexagram_id: int = 0) -> dict:
+    """Consult Tui Bei Tu (推背图) — the famous Tang Dynasty prophetic text.
+
+    Methods:
+      - 'random': randomly draws one of 60 prophecies
+      - 'hexagram': looks up prophecy by I Ching hexagram ID (1-64), with fallback
+        to wrong/reverse hexagrams if no direct match
+      - 'index': get a specific prophecy by number (1-60)
+
+    Returns prophecy with image description, poems (谶/颂), linked hexagram,
+    and historical era.
+    """
+    from name_data.pipeline import consult_tuibei, list_tuibei_eras
+    if method == "hexagram" and hexagram_id and hexagram_id > 0:
+        result = consult_tuibei(method="hexagram", hexagram_id=hexagram_id)
+        tb = result.get("tuibei", {})
+        return {
+            "consult_method": result["consult_method"],
+            "query_hexagram_id": result.get("query_hexagram_id"),
+            "match_type": result.get("match_type", "none"),
+            "via_hexagram": result.get("via_hexagram_name"),
+            "prophecy_id": tb.get("id"),
+            "image_name": tb.get("image_name"),
+            "image_desc": tb.get("image_desc"),
+            "poem_chen": tb.get("poem_chen"),
+            "poem_song": tb.get("poem_song"),
+            "commentary": tb.get("commentary"),
+            "historical_era": tb.get("historical_era"),
+            "hexagram": tb.get("hexagram"),
+        }
+    elif method == "index" and hexagram_id and hexagram_id > 0:
+        result = consult_tuibei(method="index", hexagram_id=hexagram_id)
+        tb = result.get("tuibei", {})
+        return {
+            "consult_method": "index",
+            "prophecy_id": tb.get("id"),
+            "image_name": tb.get("image_name"),
+            "image_desc": tb.get("image_desc"),
+            "poem_chen": tb.get("poem_chen"),
+            "poem_song": tb.get("poem_song"),
+            "commentary": tb.get("commentary"),
+            "historical_era": tb.get("historical_era"),
+            "hexagram": tb.get("hexagram"),
+        }
+    else:
+        result = consult_tuibei(method="random")
+        tb = result.get("tuibei", {})
+        return {
+            "consult_method": "random",
+            "prophecy_id": tb.get("id"),
+            "image_name": tb.get("image_name"),
+            "image_desc": tb.get("image_desc"),
+            "poem_chen": tb.get("poem_chen"),
+            "poem_song": tb.get("poem_song"),
+            "commentary": tb.get("commentary"),
+            "historical_era": tb.get("historical_era"),
+            "hexagram": tb.get("hexagram"),
+        }
+
+
+def tool_name_generate(surname: str, birth_year: int, birth_month: int,
+                       birth_day: int, birth_hour: int = 12,
+                       gender: str = "男", num_names: int = 30) -> dict:
+    """Generate auspicious Chinese name candidates based on BaZi and WuGe.
+
+    Calculates favorable five element from birth date, finds compatible stroke
+    combinations, queries matching characters, and scores all candidates.
+    Returns 30+ ranked name suggestions.
+    """
+    from name_data.pipeline import generate_names
+    result = generate_names(
+        surname=surname, birth_year=birth_year, birth_month=birth_month,
+        birth_day=birth_day, birth_hour=birth_hour, gender=gender,
+        num_names=num_names,
+    )
+    return {
+        "bazi_summary": result["bazi_summary"],
+        "stroke_analysis": result["stroke_analysis"],
+        "total_candidates": result["total_candidates"],
+        "top_names": [
+            {
+                "full_name": c["full_name"],
+                "name_type": c["name_type"],
+                "total_score": c["total_score"],
+                "verdict": c["verdict"],
+                "wuge_grids": c["wuge_grids"],
+                "sancai": c.get("sancai", {}),
+            }
+            for c in result["candidates"]
+        ],
+    }
+
+
+def tool_daily_fortune(date_str: str = "") -> dict:
+    """Get pre-computed daily fortune (每日运势): Chinese calendar info, daily I Ching hexagram,
+    and overall fortune level (大吉/吉/平/凶).
+
+    Each day has a deterministically pre-computed hexagram via coin divination
+    seeded by the date, plus stem-branch fortune assessment.
+
+    Leave date_str empty for today. Format: YYYY-MM-DD (e.g., 2026-07-03).
+    """
+    from datetime import date as dt_date
+    from name_data.pipeline import get_daily_fortune
+    if date_str:
+        try:
+            d = dt_date.fromisoformat(date_str)
+        except ValueError:
+            return {"error": f"Invalid date: {date_str}. Use YYYY-MM-DD."}
+    else:
+        d = dt_date.today()
+    return get_daily_fortune(d)
+
+
+def tool_huangli(date_str: str = "") -> dict:
+    """Get Chinese Almanac (黄历) for any date. Returns:
+    - 建除十二神 (Jianchu Twelve Gods): day designation and suitable/avoid activities
+    - 黄道黑道 (Yellow/Black Path): auspicious or inauspicious day officer
+    - 二十八宿 (28 Lunar Mansions): daily mansion with luminary and animal
+    - 彭祖百忌 (Peng Zu's Taboos): stem and branch taboos
+    - 宜忌 (Yi/Ji): combined suitable and avoid activities
+    - almanac_score: -100 (worst) to 100 (best)
+
+    Based on 《协纪辨方书》(Qing Dynasty official almanac). Leave date_str empty for today.
+    Format: YYYY-MM-DD (e.g., 2025-06-15).
+    """
+    from datetime import date as dt_date
+    from name_data.huangli import get_daily_almanac
+    if date_str:
+        try:
+            d = dt_date.fromisoformat(date_str)
+        except ValueError:
+            return {"error": f"Invalid date: {date_str}. Use YYYY-MM-DD."}
+    else:
+        d = dt_date.today()
+    return get_daily_almanac(d)
 
 
 def tool_data_sources() -> list[dict]:
@@ -2453,6 +2823,154 @@ TOOLS = [
             "required": ["code"],
         },
     },
+    # ── Name Data & I Ching ──
+    {
+        "name": "calendar_ganzhi",
+        "description": "Get Chinese calendar (农历/干支) info for a date. Returns year stem-branch (年干支), month stem-branch (月干支), day stem-branch (日干支), current solar term (节气), zodiac animal (生肖), and the day's position in the 60-day cycle. Useful for date conversion, BaZi reference, and determining favorable/unfavorable days. Leave date_str empty for today.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "date_str": {"type": "string", "description": "Date in YYYY-MM-DD format. Empty for today."},
+            },
+        },
+    },
+    {
+        "name": "name_generate",
+        "description": "Generate auspicious Chinese name candidates (智能取名) based on birth BaZi and surname. Calculates favorable five element, finds compatible WuGe stroke combinations, queries matching characters, and returns 30+ ranked name suggestions with scores and analysis.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "surname": {"type": "string", "description": "Surname (姓), e.g. 张"},
+                "birth_year": {"type": "integer", "description": "Birth year, e.g. 1985"},
+                "birth_month": {"type": "integer", "description": "Birth month (1-12)"},
+                "birth_day": {"type": "integer", "description": "Birth day (1-31)"},
+                "birth_hour": {"type": "integer", "description": "Birth hour (0-23), default 12"},
+                "gender": {"type": "string", "description": "Gender: 男 or 女, default 男"},
+                "num_names": {"type": "integer", "description": "Number of names to generate, default 30"},
+            },
+            "required": ["surname", "birth_year", "birth_month", "birth_day"],
+        },
+    },
+    {
+        "name": "name_score",
+        "description": "Score a Chinese name (姓名评分). Full analysis: BaZi (八字), WuGe (五格), SanCai (三才), zodiac (生肖), phonetics (音调), meaning (字义). Requires surname, given_name, and optionally birth date/time.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "surname": {"type": "string", "description": "Surname (姓), e.g. 张"},
+                "given_name": {"type": "string", "description": "Given name (名), e.g. 三"},
+                "birth_year": {"type": "integer", "description": "Birth year, e.g. 1985"},
+                "birth_month": {"type": "integer", "description": "Birth month (1-12)"},
+                "birth_day": {"type": "integer", "description": "Birth day (1-31)"},
+                "birth_hour": {"type": "integer", "description": "Birth hour (0-23), default 12"},
+                "gender": {"type": "string", "description": "Gender: 男 or 女, default 男"},
+            },
+            "required": ["surname", "given_name"],
+        },
+    },
+    {
+        "name": "name_bazi",
+        "description": "Calculate BaZi (八字) four pillars from birth date/time. Returns year/month/day/hour pillars, day master (日主), five element counts, favorable element, and zodiac.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "year": {"type": "integer", "description": "Birth year, e.g. 1985"},
+                "month": {"type": "integer", "description": "Birth month (1-12)"},
+                "day": {"type": "integer", "description": "Birth day (1-31)"},
+                "hour": {"type": "integer", "description": "Birth hour (0-23), default 12"},
+            },
+            "required": ["year", "month", "day"],
+        },
+    },
+    {
+        "name": "name_wuge",
+        "description": "Calculate Wu Ge (五格) stroke grids: Heaven/Personality/Earth/Outer/Total grids with 81-shuli analysis. Returns stroke counts, elements, and ji-xiong (吉凶) for each grid.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "surname": {"type": "string", "description": "Surname (姓), e.g. 张"},
+                "given_name": {"type": "string", "description": "Given name (名), e.g. 三"},
+            },
+            "required": ["surname", "given_name"],
+        },
+    },
+    {
+        "name": "iching_divine",
+        "description": "I Ching (周易) hexagram divination. method='coins' for coin toss (金钱卦), 'numbers' for 3-number method (数字卦/梅花易数). For numbers: a=upper trigram(1-8), b=lower trigram(1-8), c=changing line(1-6). Returns primary/mutual/changed hexagrams with judgments.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "method": {"type": "string", "description": "Divination method: 'coins' (default) or 'numbers'"},
+                "a": {"type": "integer", "description": "Upper trigram number 1-8 (for numbers method)"},
+                "b": {"type": "integer", "description": "Lower trigram number 1-8 (for numbers method)"},
+                "c": {"type": "integer", "description": "Changing line number 1-6 (for numbers method)"},
+            },
+        },
+    },
+    {
+        "name": "tuibei_consult",
+        "description": "Consult Tui Bei Tu (推背图) — Tang Dynasty prophetic classic by Li Chunfeng and Yuan Tiangang. 60 prophecies covering ~2000 years of Chinese history. Methods: 'random' draws a prophecy, 'hexagram' looks up by I Ching hexagram ID (with fallback to wrong/reverse hexagrams), 'index' gets a specific prophecy by number (1-60). Returns image description, poems (谶/颂), linked hexagram, and historical era.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "method": {"type": "string", "description": "Consultation method: 'random' (default), 'hexagram', or 'index'"},
+                "hexagram_id": {"type": "integer", "description": "Hexagram ID (1-64) for 'hexagram' method, or prophecy number (1-60) for 'index' method"},
+            },
+        },
+    },
+    {
+        "name": "daily_fortune",
+        "description": "Get pre-computed daily fortune (每日运势): Chinese calendar (year/month/day stem-branch), current solar term, zodiac, daily I Ching hexagram (deterministic per date), and overall fortune level (大吉/吉/平/凶). Each day's hexagram is generated by coin divination seeded by the date. Leave date_str empty for today.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "date_str": {"type": "string", "description": "Date in YYYY-MM-DD format. Empty for today."},
+            },
+        },
+    },
+    {
+        "name": "huangli",
+        "description": "Get Chinese Almanac (黄历) for any date. Returns jianchu twelve gods (建除十二神), yellow/black path (黄道黑道), 28 lunar mansions (二十八宿), Peng Zu taboos (彭祖百忌), and combined daily suitable/avoid activities (宜忌). Based on 《协纪辨方书》algorithms. Each day gets a score from -100 (worst) to 100 (best). Leave date_str empty for today.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "date_str": {"type": "string", "description": "Date in YYYY-MM-DD format. Empty for today."},
+            },
+        },
+    },
+    # ── SK Hynix Cross-Market ──
+    {
+        "name": "hynix_arbitrage",
+        "description": "Get SK Hynix cross-market arbitrage comparison: premium/discount vs KR base stock (000660.KS) across all tracked instruments — US ADR (SKHY, 10:1 ratio), HK 2x leveraged ETP (7709.HK), KR single-stock leveraged ETFs. Shows equivalent KRW cost per share and premium percentage. Leave date empty for latest.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "date": {"type": "string", "description": "Date YYYY-MM-DD, empty for latest"},
+            },
+        },
+    },
+    {
+        "name": "hynix_instruments",
+        "description": "List tracked SK Hynix instruments across all markets: KR stock, US ADR, HK ETP, KR ETFs. Shows ticker, market, currency, instrument type, leverage, and tracking ratio.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "market": {"type": "string", "description": "Filter by market: KR, US, HK. Empty for all."},
+            },
+        },
+    },
+    {
+        "name": "hynix_prices",
+        "description": "Get SK Hynix instrument prices. Either provide ticker for price history, or date for all instruments on that date.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "ticker": {"type": "string", "description": "Instrument ticker (e.g., 000660.KS, SKHY, 7709.HK). Leave empty to use date-based query."},
+                "date": {"type": "string", "description": "Date YYYY-MM-DD for all-instruments snapshot. Used when ticker is empty."},
+                "limit": {"type": "integer", "description": "Max records for ticker history (default 30)"},
+            },
+        },
+    },
 ]
 
 TOOL_MAP = {
@@ -2527,6 +3045,20 @@ TOOL_MAP = {
     "tw_daily_movers": tool_tw_daily_movers,
     "tw_market_indices": tool_tw_market_indices,
     "tw_stock_detail": tool_tw_stock_detail,
+    # Name Data & I Ching
+    "calendar_ganzhi": tool_calendar_ganzhi,
+    "name_generate": tool_name_generate,
+    "name_score": tool_name_score,
+    "tuibei_consult": tool_tuibei_consult,
+    "daily_fortune": tool_daily_fortune,
+    "huangli": tool_huangli,
+    "name_bazi": tool_name_bazi,
+    "name_wuge": tool_name_wuge,
+    "iching_divine": tool_iching_divine,
+    # SK Hynix Cross-Market
+    "hynix_arbitrage": tool_hynix_arbitrage,
+    "hynix_instruments": tool_hynix_instruments,
+    "hynix_prices": tool_hynix_prices,
 }
 
 
