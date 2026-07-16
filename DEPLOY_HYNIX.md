@@ -46,10 +46,28 @@ frontend/src/app/hynix/
 ### 1.2 依赖
 
 ```bash
-pip install duckdb pandas fastapi uvicorn yfinance
+pip install duckdb pandas fastapi uvicorn finance-datareader requests
 ```
 
-无需 API Key，全部数据通过 yfinance 免费获取。
+**无需 yfinance**（已替换为多源方案，避免 Yahoo Finance IP 封禁）。
+
+可选：如需 US ADR 数据的备用源，注册免费 [Alpha Vantage](https://www.alphavantage.co/support/#api-key) API Key，在 `.env` 中添加：
+```bash
+ALPHA_VANTAGE_KEY=your_key_here
+```
+
+### 1.2.1 数据源说明
+
+| 标的 | 主数据源 | 备用源 | 依赖 Yahoo? |
+|---|---|---|---|
+| 000660.KS | FinanceDataReader (KRX直连) | — | 否 |
+| 0193T0.KS | FinanceDataReader (KRX直连) | — | 否 |
+| SKHY | FinanceDataReader (Yahoo) | Alpha Vantage | 主源是 |
+| 7709.HK | 腾讯财经 (Tencent QQ) | EastMoney / FDR | 否 |
+| USD/KRW, HKD/KRW | open.er-api.com | akshare fx_spot_quote | 否 |
+
+> SKHY 的 FinanceDataReader 底层走 Yahoo Finance。如果服务器已被 Yahoo 封禁，SKHY 会拉取失败。
+> 此时可设置 `ALPHA_VANTAGE_KEY` 环境变量启用备用源（免费额度 25 req/天，够日频拉取）。
 
 ### 1.3 初始化数据
 

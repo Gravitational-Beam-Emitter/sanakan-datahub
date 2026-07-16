@@ -1,5 +1,13 @@
 """
 hynix configuration — SK Hynix cross-market instruments and FX pairs.
+
+Data sources (yfinance-free, for servers blocked by Yahoo):
+  - FinanceDataReader (KRX backend) → Korean stocks (000660.KS, 0193T0.KS)
+  - EastMoney push2 API          → HK stocks (7709.HK)
+  - FinanceDataReader (Yahoo)    → US stocks (SKHY) — may fail if Yahoo blocked
+  - Alpha Vantage API            → US stocks fallback (needs ALPHA_VANTAGE_KEY)
+  - open.er-api.com              → FX rates (free, no key)
+  - akshare fx_spot_quote        → FX rates fallback (current only)
 """
 
 import os
@@ -16,11 +24,14 @@ DB_PATH = str(Path(__file__).resolve().parent / "hynix.duckdb")
 BASE_TICKER = "000660.KS"
 BASE_NAME = "SK hynix"
 
+# Alpha Vantage API key (optional, for US stock fallback)
+ALPHA_VANTAGE_KEY = os.getenv("ALPHA_VANTAGE_KEY", "")
+
 # ═══════════════════════════════════════════════════════════════
 #  Instrument catalog
 # ═══════════════════════════════════════════════════════════════
 # Each instrument has:
-#   ticker:         yfinance / FinanceDataReader ticker
+#   ticker:         primary identifier (used in DB)
 #   name:           display name
 #   market:         KR, US, HK
 #   currency:       KRW, USD, HKD
@@ -31,7 +42,8 @@ BASE_NAME = "SK hynix"
 #                   None = auto-estimated from prices
 #   skh_weight:     fraction of instrument that is SK Hynix exposure
 #                   (1.0 = pure single-stock, 0.23 = 23% weight)
-#   yf_ticker:      override yfinance ticker if different from DB ticker
+#   fdr_code:       FinanceDataReader ticker (KRX/NASDAQ/HKEX)
+#   em_secid:       EastMoney secid (e.g., "116.07709" for HK stocks)
 #   note:           human-readable description
 
 INSTRUMENTS = [
@@ -45,7 +57,8 @@ INSTRUMENTS = [
         "leverage": 1.0,
         "tracking_ratio": 1.0,
         "skh_weight": 1.0,
-        "yf_ticker": "000660.KS",
+        "fdr_code": "000660",
+        "em_secid": None,
         "note": "KOSPI common stock, base reference",
     },
     # ── US ADR ──
@@ -58,7 +71,8 @@ INSTRUMENTS = [
         "leverage": 1.0,
         "tracking_ratio": 0.1,
         "skh_weight": 1.0,
-        "yf_ticker": "SKHY",
+        "fdr_code": "SKHY",
+        "em_secid": None,
         "note": "Nasdaq ADR, 10 ADR = 1 KR common share, listed 2026-07-10",
     },
     # ── HK 2x leveraged ETP ──
@@ -71,7 +85,8 @@ INSTRUMENTS = [
         "leverage": 2.0,
         "tracking_ratio": None,
         "skh_weight": 1.0,
-        "yf_ticker": "7709.HK",
+        "fdr_code": "07709",
+        "em_secid": "116.07709",
         "note": "Swap-based synthetic 2x daily leveraged ETP, listed 2025-10-16",
     },
     # ── KR single-stock leveraged ETFs ──
@@ -84,7 +99,8 @@ INSTRUMENTS = [
         "leverage": 2.0,
         "tracking_ratio": None,
         "skh_weight": 1.0,
-        "yf_ticker": "0193T0.KS",
+        "fdr_code": "0193T0",
+        "em_secid": None,
         "note": "Samsung KODEX single-stock 2x leveraged ETF",
     },
     # ── KR semiconductor ETFs with heavy SKH weight (secondary) ──
@@ -95,7 +111,7 @@ INSTRUMENTS = [
     #     "name": "KIWOOM K-TechTop10 ETF",
     #     "market": "KR", "currency": "KRW", "instrument_type": "etf",
     #     "leverage": 1.0, "tracking_ratio": None, "skh_weight": 0.23,
-    #     "yf_ticker": "469790.KS",
+    #     "fdr_code": "469790", "em_secid": None,
     #     "note": "Top 10 KR tech stocks, ~23% SK Hynix weight",
     # },
 ]

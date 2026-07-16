@@ -1,6 +1,14 @@
 """
 Data pipeline — fetch SK Hynix cross-market prices and compute arbitrage.
 
+Data sources (yfinance-free):
+  - FinanceDataReader (KRX backend) → Korean stocks
+  - FinanceDataReader (Yahoo backend) → US ADR (may fail if Yahoo blocked)
+  - Alpha Vantage API           → US ADR fallback (needs ALPHA_VANTAGE_KEY)
+  - EastMoney push2 API         → HK stocks
+  - open.er-api.com             → FX rates (free, no key)
+  - akshare fx_spot_quote       → FX rates fallback
+
 Usage:
     python -m hynix.pipeline                   # fetch latest trading day
     python -m hynix.pipeline --init            # seed instruments + backfill 90d
@@ -18,9 +26,9 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
-import yfinance as yf
+import requests
 
-from hynix.config import INSTRUMENTS, FX_PAIRS, BASE_TICKER, DEFAULT_LOOKBACK_DAYS
+from hynix.config import INSTRUMENTS, FX_PAIRS, BASE_TICKER, DEFAULT_LOOKBACK_DAYS, ALPHA_VANTAGE_KEY
 from hynix.storage import (
     init_db,
     _norm_date,
@@ -34,6 +42,20 @@ from hynix.storage import (
 )
 
 logger = logging.getLogger("hynix.pipeline")
+
+# Shared requests session with browser-like headers
+_SESSION = None
+
+def _get_session() -> requests.Session:
+    global _SESSION
+    if _SESSION is None:
+        _SESSION = requests.Session()
+        _SESSION.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7",
+        })
+    return _SESSION
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -50,74 +72,117 @@ def seed_instruments(db_path: Optional[str] = None) -> int:
 
 
 # ═══════════════════════════════════════════════════════════════
-#  FX rate fetch
+#  FX rate fetch (open.er-api.com + akshare fallback)
 # ═══════════════════════════════════════════════════════════════
 
 def _fetch_fx_rates(date_str: str) -> pd.DataFrame:
-    """Fetch FX rates for a given date via yfinance.
+    """Fetch FX rates for a given date.
+
+    Primary: open.er-api.com (free, no key, daily rates)
+    Fallback: akshare fx_spot_quote (current spot only)
 
     Returns DataFrame with columns: date, from_ccy, to_ccy, rate
     """
     rows = []
-    yf_map = {
-        ("USD", "KRW"): "KRW=X",
-        ("HKD", "KRW"): "HKDKRW=X",
-    }
+    session = _get_session()
 
-    for (from_ccy, to_ccy), yf_ticker in yf_map.items():
+    # ── Primary: open.er-api.com ──
+    try:
+        r = session.get("https://open.er-api.com/v6/latest/USD", timeout=10)
+        r.raise_for_status()
+        data = r.json()
+        usd_krw = data.get("rates", {}).get("KRW")
+        usd_hkd = data.get("rates", {}).get("HKD")
+
+        if usd_krw and usd_krw > 0:
+            rows.append({
+                "date": pd.Timestamp(date_str).date(),
+                "from_ccy": "USD",
+                "to_ccy": "KRW",
+                "rate": round(usd_krw, 4),
+            })
+            logger.info(f"FX USD/KRW = {usd_krw:.2f} (open.er-api.com)")
+
+        if usd_hkd and usd_hkd > 0 and usd_krw and usd_krw > 0:
+            hkd_krw = usd_krw / usd_hkd
+            rows.append({
+                "date": pd.Timestamp(date_str).date(),
+                "from_ccy": "HKD",
+                "to_ccy": "KRW",
+                "rate": round(hkd_krw, 4),
+            })
+            logger.info(f"FX HKD/KRW = {hkd_krw:.2f} (derived from USD/KRW ÷ USD/HKD)")
+    except Exception as e:
+        logger.warning(f"open.er-api.com FX fetch failed: {e}")
+
+    # ── Fallback: akshare fx_spot_quote ──
+    if not rows:
         try:
-            end_date = (pd.Timestamp(date_str) + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
-            ticker = yf.Ticker(yf_ticker)
-            hist = ticker.history(start=date_str, end=end_date)
-            if hist.empty:
-                # Try a wider window
-                start_w = (pd.Timestamp(date_str) - pd.Timedelta(days=5)).strftime("%Y-%m-%d")
-                hist = ticker.history(start=start_w, end=end_date)
-            if not hist.empty:
-                rate = float(hist["Close"].iloc[-1])
-                rows.append({
-                    "date": pd.Timestamp(date_str).date(),
-                    "from_ccy": from_ccy,
-                    "to_ccy": to_ccy,
-                    "rate": rate,
-                })
-            else:
-                logger.warning(f"No FX data for {yf_ticker} on {date_str}")
+            import akshare as ak
+            fx_spot = ak.fx_spot_quote()
+            for _, row in fx_spot.iterrows():
+                pair = str(row.get("货币对", ""))
+                if "USD/KRW" in pair or "USDKRW" in pair:
+                    try:
+                        rate = float(row.get("买报价", 0))
+                        if rate > 0:
+                            rows.append({
+                                "date": pd.Timestamp(date_str).date(),
+                                "from_ccy": "USD",
+                                "to_ccy": "KRW",
+                                "rate": rate,
+                            })
+                    except (ValueError, TypeError):
+                        pass
+                if "HKD/KRW" in pair or "HKDKRW" in pair:
+                    try:
+                        rate = float(row.get("买报价", 0))
+                        if rate > 0:
+                            rows.append({
+                                "date": pd.Timestamp(date_str).date(),
+                                "from_ccy": "HKD",
+                                "to_ccy": "KRW",
+                                "rate": rate,
+                            })
+                    except (ValueError, TypeError):
+                        pass
+            if rows:
+                logger.info(f"FX rates from akshare fallback: {len(rows)} pairs")
         except Exception as e:
-            logger.error(f"FX fetch failed for {from_ccy}/{to_ccy}: {e}")
+            logger.error(f"akshare FX fallback also failed: {e}")
 
     return pd.DataFrame(rows)
 
 
 # ═══════════════════════════════════════════════════════════════
-#  Price fetch
+#  Price fetch — FinanceDataReader (KR + US)
 # ═══════════════════════════════════════════════════════════════
 
-def _fetch_price_yfinance(yf_ticker: str, date_str: str) -> Optional[Dict[str, Any]]:
-    """Fetch OHLCV for a single instrument on a given date via yfinance.
+def _fetch_price_fdr(fdr_code: str, date_str: str, market: str) -> Optional[Dict[str, Any]]:
+    """Fetch OHLCV via FinanceDataReader.
 
-    Returns dict with: ticker, date, open, high, low, close, volume, change_pct
+    - KR stocks: uses KRX backend directly (no Yahoo dependency)
+    - US stocks: uses Yahoo backend (may fail if Yahoo blocked on server)
     """
     try:
-        end_date = (pd.Timestamp(date_str) + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
-        start_date = (pd.Timestamp(date_str) - pd.Timedelta(days=5)).strftime("%Y-%m-%d")
-        ticker = yf.Ticker(yf_ticker)
-        hist = ticker.history(start=start_date, end=end_date)
+        import FinanceDataReader as fdr
 
-        if hist.empty:
-            logger.warning(f"No price data for {yf_ticker} around {date_str}")
+        start = (pd.Timestamp(date_str) - pd.Timedelta(days=10)).strftime("%Y-%m-%d")
+        end = (pd.Timestamp(date_str) + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
+
+        df = fdr.DataReader(fdr_code, start, end)
+        if df.empty:
+            logger.warning(f"FDR: no data for {fdr_code} ({market}) around {date_str}")
             return None
 
-        # Find the row closest to date_str
-        target_date = pd.Timestamp(date_str).tz_localize(hist.index.tz) if hist.index.tz else pd.Timestamp(date_str)
-        if target_date not in hist.index:
-            # Use most recent date ≤ target
-            hist = hist[hist.index <= target_date]
-            if hist.empty:
-                return None
+        # Find row closest to target date
+        target_dt = pd.Timestamp(date_str).date()
+        df = df[df.index <= pd.Timestamp(date_str)]
+        if df.empty:
+            return None
 
-        row = hist.iloc[-1]
-        prev_row = hist.iloc[-2] if len(hist) > 1 else None
+        row = df.iloc[-1]
+        prev_row = df.iloc[-2] if len(df) > 1 else None
 
         close = float(row["Close"])
         change_pct = None
@@ -125,8 +190,7 @@ def _fetch_price_yfinance(yf_ticker: str, date_str: str) -> Optional[Dict[str, A
             change_pct = ((close - float(prev_row["Close"])) / float(prev_row["Close"])) * 100
 
         return {
-            "ticker": yf_ticker,
-            "date": pd.Timestamp(date_str).date(),
+            "date": target_dt,
             "open": float(row["Open"]) if pd.notna(row.get("Open")) else None,
             "high": float(row["High"]) if pd.notna(row.get("High")) else None,
             "low": float(row["Low"]) if pd.notna(row.get("Low")) else None,
@@ -134,10 +198,274 @@ def _fetch_price_yfinance(yf_ticker: str, date_str: str) -> Optional[Dict[str, A
             "volume": int(row["Volume"]) if pd.notna(row.get("Volume")) else None,
             "change_pct": change_pct,
         }
+    except ImportError:
+        logger.error("FinanceDataReader not installed. Install with: pip install finance-datareader")
+        return None
     except Exception as e:
-        logger.error(f"Price fetch failed for {yf_ticker}: {e}")
+        logger.error(f"FDR fetch failed for {fdr_code} ({market}): {e}")
         return None
 
+
+# ═══════════════════════════════════════════════════════════════
+#  Price fetch — Tencent QQ (HK stocks, primary)
+# ═══════════════════════════════════════════════════════════════
+
+def _fetch_price_tencent(ticker: str, date_str: str, days: int = 30) -> Optional[Dict[str, Any]]:
+    """Fetch OHLCV for HK stocks via Tencent QQ Finance API.
+
+    ticker format: "07709" (5-digit HK code)
+    Returns daily kline data in format: [date, open, close, high, low, volume]
+    """
+    session = _get_session()
+    # Use a wider date range to ensure we capture the target date
+    start = (pd.Timestamp(date_str) - pd.Timedelta(days=days)).strftime("%Y-%m-%d")
+    end = (pd.Timestamp(date_str) + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
+
+    url = (
+        f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+        f"?param=hk{ticker},day,{start},{end},{days + 5},qfq"
+    )
+
+    try:
+        r = session.get(url, timeout=15)
+        r.raise_for_status()
+        data = r.json()
+
+        if data.get("code") != 0:
+            logger.warning(f"Tencent API returned code={data.get('code')} for hk{ticker}")
+            return None
+
+        stock_data = data.get("data", {}).get(f"hk{ticker}")
+        if not stock_data:
+            logger.warning(f"Tencent: no data for hk{ticker}")
+            return None
+
+        days_list = stock_data.get("day") or stock_data.get("qfqday") or []
+        if not days_list:
+            logger.warning(f"Tencent: no daily klines for hk{ticker}")
+            return None
+
+        # Parse: [date, open, close, high, low, volume]
+        target_date = pd.Timestamp(date_str).date()
+        best = None
+        best_idx = -1
+        for i, row in enumerate(days_list):
+            if len(row) < 6:
+                continue
+            k_date = pd.Timestamp(row[0]).date()
+            if k_date <= target_date:
+                best = row
+                best_idx = i
+            else:
+                break
+
+        if not best:
+            return None
+
+        close = float(best[2])
+        change_pct = None
+        if best_idx > 0:
+            prev_row = days_list[best_idx - 1]
+            if len(prev_row) >= 3 and float(prev_row[2]) > 0:
+                change_pct = ((close - float(prev_row[2])) / float(prev_row[2])) * 100
+
+        return {
+            "date": target_date,
+            "open": float(best[1]),
+            "high": float(best[3]),
+            "low": float(best[4]),
+            "close": close,
+            "volume": int(float(best[5])) if best[5] and best[5] != "0" else None,
+            "change_pct": change_pct,
+        }
+    except Exception as e:
+        logger.error(f"Tencent fetch failed for hk{ticker}: {e}")
+        return None
+
+
+# ═══════════════════════════════════════════════════════════════
+#  Price fetch — EastMoney (HK stocks, fallback)
+# ═══════════════════════════════════════════════════════════════
+
+def _fetch_price_eastmoney(em_secid: str, date_str: str) -> Optional[Dict[str, Any]]:
+    """Fetch OHLCV for HK stocks via EastMoney push2 API (fallback).
+
+    em_secid format: "116.07709" (market_code.ticker, 116 = HK)
+    """
+    session = _get_session()
+    beg = date_str.replace("-", "")[:8]
+    end = (pd.Timestamp(date_str) + pd.Timedelta(days=1)).strftime("%Y%m%d")
+
+    url = (
+        f"https://push2his.eastmoney.com/api/qt/stock/kline/get"
+        f"?secid={em_secid}"
+        f"&fields1=f1,f2,f3,f4,f5,f6"
+        f"&fields2=f51,f52,f53,f54,f55,f56,f57"
+        f"&klt=101&fqt=0"
+        f"&beg={beg}&end={end}&lmt=30"
+    )
+
+    try:
+        r = session.get(url, timeout=15)
+        r.raise_for_status()
+        data = r.json()
+
+        if data.get("rc") != 0:
+            return None
+
+        result = data.get("data")
+        if not result or not result.get("klines"):
+            return None
+
+        klines = result["klines"]
+        target_date = pd.Timestamp(date_str).date()
+
+        best = None
+        for line in klines:
+            parts = line.split(",")
+            if len(parts) < 6:
+                continue
+            k_date = pd.Timestamp(parts[0]).date()
+            if k_date <= target_date:
+                best = parts
+            else:
+                break
+
+        if not best:
+            return None
+
+        close = float(best[2])
+        return {
+            "date": target_date,
+            "open": float(best[1]),
+            "high": float(best[3]),
+            "low": float(best[4]),
+            "close": close,
+            "volume": int(float(best[5])) if best[5] else None,
+            "change_pct": None,
+        }
+    except Exception:
+        return None
+
+
+# ═══════════════════════════════════════════════════════════════
+#  Price fetch — Alpha Vantage (US stock fallback)
+# ═══════════════════════════════════════════════════════════════
+
+def _fetch_price_alpha_vantage(symbol: str, date_str: str) -> Optional[Dict[str, Any]]:
+    """Fetch OHLCV for US stocks via Alpha Vantage API.
+
+    Requires ALPHA_VANTAGE_KEY in .env. Free tier: 25 req/day.
+    """
+    if not ALPHA_VANTAGE_KEY:
+        logger.warning("No ALPHA_VANTAGE_KEY set — skipping Alpha Vantage fallback")
+        return None
+
+    session = _get_session()
+    try:
+        url = (
+            f"https://www.alphavantage.co/query"
+            f"?function=TIME_SERIES_DAILY"
+            f"&symbol={symbol}"
+            f"&outputsize=compact"
+            f"&apikey={ALPHA_VANTAGE_KEY}"
+        )
+        r = session.get(url, timeout=15)
+        r.raise_for_status()
+        data = r.json()
+
+        # Check for error / rate limit
+        if "Error Message" in data or "Note" in data:
+            logger.warning(f"Alpha Vantage: {data.get('Error Message') or data.get('Note')}")
+            return None
+
+        ts = data.get("Time Series (Daily)", {})
+        if not ts:
+            logger.warning(f"Alpha Vantage: no time series for {symbol}")
+            return None
+
+        # Find date ≤ target
+        target = pd.Timestamp(date_str).date()
+        available_dates = sorted(ts.keys(), reverse=True)
+        best_date = None
+        for d in available_dates:
+            if pd.Timestamp(d).date() <= target:
+                best_date = d
+                break
+
+        if not best_date:
+            return None
+
+        row = ts[best_date]
+        close = float(row["4. close"])
+
+        return {
+            "date": target,
+            "open": float(row["1. open"]),
+            "high": float(row["2. high"]),
+            "low": float(row["3. low"]),
+            "close": close,
+            "volume": int(row["5. volume"]) if row.get("5. volume") else None,
+            "change_pct": None,  # Alpha Vantage doesn't provide this easily
+        }
+    except Exception as e:
+        logger.error(f"Alpha Vantage fetch failed for {symbol}: {e}")
+        return None
+
+
+# ═══════════════════════════════════════════════════════════════
+#  Unified price fetch router
+# ═══════════════════════════════════════════════════════════════
+
+def _fetch_price(instrument: Dict, date_str: str) -> Optional[Dict[str, Any]]:
+    """Fetch OHLCV for a single instrument using the appropriate backend."""
+    ticker = instrument["ticker"]
+    market = instrument["market"]
+    fdr_code = instrument.get("fdr_code")
+    em_secid = instrument.get("em_secid")
+
+    data = None
+    source = "none"
+
+    if market == "KR":
+        # Korean stocks → FinanceDataReader (KRX backend, no Yahoo)
+        if fdr_code:
+            data = _fetch_price_fdr(fdr_code, date_str, "KR")
+            source = "fdr-krx"
+
+    elif market == "HK":
+        # HK stocks → Tencent QQ primary, EastMoney fallback
+        if fdr_code:
+            data = _fetch_price_tencent(fdr_code, date_str)
+            source = "tencent"
+        if not data and em_secid:
+            data = _fetch_price_eastmoney(em_secid, date_str)
+            source = "eastmoney"
+        if not data and fdr_code:
+            data = _fetch_price_fdr(fdr_code, date_str, "HK")
+            source = "fdr-hkex"
+
+    elif market == "US":
+        # US ADR → FDR (Yahoo backend), Alpha Vantage fallback
+        if fdr_code:
+            data = _fetch_price_fdr(fdr_code, date_str, "US")
+            source = "fdr-yahoo"
+        if not data and ALPHA_VANTAGE_KEY:
+            data = _fetch_price_alpha_vantage(ticker, date_str)
+            source = "alphavantage"
+
+    if data:
+        data["ticker"] = ticker
+        logger.debug(f"  {ticker}: OK via {source}")
+    else:
+        logger.warning(f"  {ticker}: FAILED (market={market})")
+
+    return data
+
+
+# ═══════════════════════════════════════════════════════════════
+#  Price fetch orchestrator (replaces fetch_prices)
+# ═══════════════════════════════════════════════════════════════
 
 def fetch_prices(date_str: str, db_path: Optional[str] = None,
                  instruments: Optional[List[Dict]] = None) -> int:
@@ -153,12 +481,10 @@ def fetch_prices(date_str: str, db_path: Optional[str] = None,
 
     rows = []
     for inst in instruments:
-        yf_ticker = inst.get("yf_ticker") or inst["ticker"]
-        data = _fetch_price_yfinance(yf_ticker, date_str)
+        data = _fetch_price(inst, date_str)
         if data:
-            data["ticker"] = inst["ticker"]  # Use DB ticker, not yf ticker
             rows.append(data)
-        time.sleep(0.2)  # Rate limit
+        time.sleep(0.5)  # Rate limit between instruments
 
     if rows:
         df = pd.DataFrame(rows)
@@ -172,29 +498,16 @@ def fetch_prices(date_str: str, db_path: Optional[str] = None,
 
 
 # ═══════════════════════════════════════════════════════════════
-#  ETF NAV estimation
+#  ETF NAV estimation (simplified — no yfinance dependency)
 # ═══════════════════════════════════════════════════════════════
 
 def _estimate_etf_nav(instrument: Dict, yf_ticker: str, date_str: str) -> Optional[float]:
-    """Attempt to estimate ETF NAV from yfinance.
+    """Attempt to estimate ETF NAV. Returns None if unavailable.
 
-    For most ETFs, yfinance doesn't provide NAV directly.
-    We try the yfinance fund info or return None.
+    Without yfinance, NAV data is not easily accessible from our free sources.
+    This function always returns None for now.
+    A future improvement could use KRX ETF NAV API for Korean ETFs.
     """
-    try:
-        t = yf.Ticker(yf_ticker)
-        # Some ETFs publish NAV via fast_info or history metadata
-        info = t.fast_info
-        nav = getattr(info, "nav_price", None)
-        if nav and nav > 0:
-            return float(nav)
-        # Try fund info
-        fund_info = t.info if hasattr(t, "info") else {}
-        nav = fund_info.get("navPrice") or fund_info.get("netAssetValue")
-        if nav:
-            return float(nav)
-    except Exception:
-        pass
     return None
 
 
@@ -405,13 +718,8 @@ def fetch_daily(date_str: str, db_path: Optional[str] = None) -> Dict[str, Any]:
     if not fx_df.empty:
         fx_count = upsert_fx_rates(conn, fx_df)
     else:
-        # Try to use previous day's FX rate
-        prev_date = (pd.Timestamp(date_str) - pd.Timedelta(days=1)).strftime("%Y-%m-%d")
-        fx_prev = _fetch_fx_rates(prev_date)
-        if not fx_prev.empty:
-            fx_prev["date"] = pd.Timestamp(date_str).date()
-            fx_count = upsert_fx_rates(conn, fx_prev)
-            logger.info(f"Used previous day FX rates for {date_str}")
+        errors.append("FX rates: all sources failed")
+        logger.error("No FX rates available")
 
     conn.close()
 
