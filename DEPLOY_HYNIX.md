@@ -2,6 +2,24 @@
 
 > 给另一个项目的开发者：本文档说明如何部署海力士数据服务、以及如何用这些数据构建前端页面。
 
+## ⚠️ 近期变化（2026-07-16）
+
+**已彻底移除 yfinance 依赖**，改用多源架构避免 Yahoo Finance IP 封禁：
+
+| 标的 | 新主数据源 | 旧数据源 | 影响 |
+|---|---|---|---|
+| 000660.KS（韩国正股） | FinanceDataReader → KRX 直连 | yfinance | 更稳定，无封禁风险 |
+| 0193T0.KS（杠杆 ETF） | FinanceDataReader → KRX 直连 | yfinance | 更稳定，无封禁风险 |
+| 7709.HK（HK 杠杆 ETP） | 腾讯财经 API → EastMoney 备用 | yfinance | 完全脱离 Yahoo |
+| SKHY（美国 ADR） | FinanceDataReader → Yahoo + Alpha Vantage 备用 | yfinance | 主源仍走 Yahoo，需配 API Key 作备用 |
+| USD/KRW, HKD/KRW | open.er-api.com → akshare 备用 | yfinance | 免费、无需 Key |
+
+**部署者需要做什么：**
+- `pip install finance-datareader requests`（不再需要 yfinance）
+- 如果部署服务器也被 Yahoo 封禁，请在 `.env` 中配置 `ALPHA_VANTAGE_KEY`（免费注册）以确保 SKHY ADR 数据不掉
+
+---
+
 ## 概述
 
 SK Hynix（000660.KS）同时在多个市场交易。本模块追踪 **4 个标的**，折算为等效 1 股韩国普通股后进行折溢价对比：
@@ -26,7 +44,7 @@ hynix/
 ├── __init__.py
 ├── config.py          # 标的信息 + FX 配置
 ├── storage.py         # DuckDB 读写（5 张表）
-├── pipeline.py        # yfinance 拉取 + 套利计算
+├── pipeline.py        # 多源拉取 + 套利计算（FDR/腾讯/Alpha Vantage/open.er-api）
 ├── api.py             # FastAPI REST API（端口 8008）
 └── hynix.duckdb       # 数据库文件（运行后生成）
 
@@ -386,7 +404,7 @@ const historicalSnapshot = await res.json();
 ```
 ┌─────────────────────────────────────────┐
 │  ← 日期导航 →   SK Hynix 跨市场套利追踪  │
-│  数据来源: yfinance / KRX / HKEX / Nasdaq │
+│  数据来源: KRX / 腾讯财经 / Nasdaq / open.er-api │
 ├─────────────────────────────────────────┤
 │  [折溢价对比] [ADR机制分析] [杠杆产品分析] [接入指南] │  ← Tab 切换
 ├─────────────────────────────────────────┤
@@ -506,7 +524,12 @@ python -m hynix.pipeline --init
 这是首次拉取时的正常行为——跟踪比率（tracking_ratio）在第一次拉取时估算，第二次及以后才会显示真实的溢价变动。
 
 **缺少某日数据？**
-yfinance 在周末/节假日无数据。Pipeline 自动跳过周末。如果交易日缺数据，可能是 API 限流——手动跑一次：
+周末/节假日无交易数据。Pipeline 自动跳过周末。如果交易日缺数据，可能是 API 限流——手动跑一次：
 ```bash
 python -m hynix.pipeline --date 2026-07-15
 ```
+
+**SKHY（美国 ADR）拉取失败？**
+FinanceDataReader 对美股底层走 Yahoo Finance。如果服务器被 Yahoo 封禁，SKHY 会失败。解决方案：
+1. 在 `.env` 中配置 `ALPHA_VANTAGE_KEY=你的key`（在 https://www.alphavantage.co/support/#api-key 免费注册，25 req/天）
+2. 重启 API 后 pipeline 会自动使用 Alpha Vantage 作为备用源
