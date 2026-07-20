@@ -1868,6 +1868,105 @@ def tool_hynix_prices(ticker: str = "", date: str = "", limit: int = 30) -> dict
         conn.close()
 
 
+# ── Korean Retail Leverage (kimpremium.com) ─────────────────────
+
+def tool_kr_leverage_summary() -> dict:
+    """Get latest Korean retail leverage KPI snapshot: R2, forced liquidation, deposits, valuation, ETF flows, credit utilization."""
+    conn = _hynix_conn()
+    try:
+        return _leverage_latest(conn)
+    finally:
+        conn.close()
+
+
+def _leverage_latest(conn) -> dict:
+    meta_row = conn.execute(
+        "SELECT generated, asof_date, range_start, range_end, range_rows, kpi_json, etf_kpi_json FROM kr_leverage_meta WHERE id = 1"
+    ).fetchone()
+    if not meta_row:
+        return {"error": "No KR leverage data. Run hynix pipeline with --init first."}
+
+    latest_date = conn.execute("SELECT MAX(date) FROM kr_leverage_daily").fetchone()
+    latest_etf = conn.execute("SELECT MAX(date) FROM kr_leverage_etf_daily").fetchone()
+
+    kpi = json.loads(meta_row[5]) if meta_row[5] else {}
+    etf_kpi = json.loads(meta_row[6]) if meta_row[6] else {}
+
+    # Latest daily row for alerts
+    daily = None
+    if latest_date and latest_date[0]:
+        row = conn.execute(
+            """SELECT r2, p10, kospi, spx, fin, dep, liq, liqR, mg, util, misu
+               FROM kr_leverage_daily WHERE date = ?""",
+            [str(latest_date[0])],
+        ).fetchone()
+        if row:
+            daily = {
+                "date": str(latest_date[0]),
+                "r2": row[0], "r2_10y_pct": row[1],
+                "kospi": row[2], "spx": row[3],
+                "fin_trillion": row[4], "dep_trillion": row[5],
+                "liq_100m": row[6], "liq_ratio": row[7],
+                "mcap_gdp_pct": row[8], "credit_util_pct": row[9],
+                "misu_trillion": row[10],
+            }
+
+    return {
+        "generated": meta_row[0],
+        "asof": meta_row[1],
+        "range": {"start": meta_row[2], "end": meta_row[3], "rows": meta_row[4]},
+        "latest_daily_date": str(latest_date[0]) if latest_date and latest_date[0] else None,
+        "latest_etf_date": str(latest_etf[0]) if latest_etf and latest_etf[0] else None,
+        "kpi": kpi,
+        "etf_kpi": etf_kpi,
+        "latest_daily": daily,
+    }
+
+
+def tool_kr_leverage_series(indicator: str = "r2", limit: int = 200) -> dict:
+    """Get a time series from Korean retail leverage data. indicator: r2, p10, kospi, kosdaq, spx, fin, finKospi, finKosdaq, dep, derivDep, rp, col, misu, liq, liqR, r1, r1p, r1q, mcap, loan, mg, util."""
+    conn = _hynix_conn()
+    try:
+        valid = ["r2", "p10", "kospi", "kosdaq", "spx", "fin", "finKospi", "finKosdaq",
+                 "dep", "derivDep", "rp", "col", "misu", "liq", "liqR", "r1", "r1p",
+                 "r1q", "mcap", "loan", "mg", "util"]
+        if indicator not in valid:
+            return {"error": f"Unknown indicator '{indicator}'. Valid: {valid}"}
+
+        rows = conn.execute(f"""
+            SELECT date, {indicator} AS value FROM kr_leverage_daily
+            WHERE {indicator} IS NOT NULL ORDER BY date DESC LIMIT ?
+        """, [limit]).fetchall()
+        return {
+            "indicator": indicator,
+            "count": len(rows),
+            "data": [{"date": str(r[0]), "value": r[1]} for r in rows],
+        }
+    finally:
+        conn.close()
+
+
+def tool_kr_leverage_etf(indicator: str = "thermo", limit: int = 200) -> dict:
+    """Get Korean leveraged ETF flow time series. indicator: thermo, thermoW, flow, flowW, cumFlow, cumFlowW."""
+    conn = _hynix_conn()
+    try:
+        valid = ["r2", "thermo", "thermoW", "flow", "flowW", "cumFlow", "cumFlowW"]
+        if indicator not in valid:
+            return {"error": f"Unknown ETF indicator '{indicator}'. Valid: {valid}"}
+
+        rows = conn.execute(f"""
+            SELECT date, {indicator} AS value FROM kr_leverage_etf_daily
+            WHERE {indicator} IS NOT NULL ORDER BY date DESC LIMIT ?
+        """, [limit]).fetchall()
+        return {
+            "indicator": indicator,
+            "count": len(rows),
+            "data": [{"date": str(r[0]), "value": r[1]} for r in rows],
+        }
+    finally:
+        conn.close()
+
+
 # ── Source metadata ──────────────────────────────────────────────
 
 SOURCE_META = {
@@ -2938,6 +3037,37 @@ TOOLS = [
             },
         },
     },
+    # ── Korean Retail Leverage (kimpremium.com) ──
+    {
+        "name": "kr_leverage_summary",
+        "description": "Get Korean retail leverage KPI snapshot: R2 margin ratio, 5d-avg forced liquidation, KOSPI mcap/GDP valuation, credit utilization, leveraged ETF thermo reading, deposits. Data from KOFIA FreeSIS / KSD SEIBro (daily, 1998-present).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    {
+        "name": "kr_leverage_series",
+        "description": "Get a single-indicator time series from the Korean retail leverage database. Available indicators: r2 (margin/deposits), p10 (10y percentile), kospi, kosdaq, spx, fin/finKospi/finKosdaq (margin balance in KRW trillion), dep (investor deposits), liq (forced liquidation in 100M KRW), liqR (liq/misu ratio), mg (KOSPI mcap/GDP), util (credit/capital ratio), and more. 7138+ trading days from 1998.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "indicator": {"type": "string", "description": "Indicator code: r2, p10, kospi, spx, fin, dep, liq, liqR, mg, util, misu, r1, etc."},
+                "limit": {"type": "integer", "description": "Max records (default 200)"},
+            },
+        },
+    },
+    {
+        "name": "kr_leverage_etf",
+        "description": "Get Korean leveraged ETF daily flow data: thermo (leverage thermometer, %), flow (daily net subscription in 100M KRW), cumFlow (cumulative net flow in KRW trillion). Covers ~38 domestic leveraged ETFs. Data from KSD SEIBro, 2024-present.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "indicator": {"type": "string", "description": "Indicator: thermo, thermoW, flow, flowW, cumFlow, cumFlowW"},
+                "limit": {"type": "integer", "description": "Max records (default 200)"},
+            },
+        },
+    },
     # ── SK Hynix Cross-Market ──
     {
         "name": "hynix_arbitrage",
@@ -3059,6 +3189,10 @@ TOOL_MAP = {
     "hynix_arbitrage": tool_hynix_arbitrage,
     "hynix_instruments": tool_hynix_instruments,
     "hynix_prices": tool_hynix_prices,
+    # Korean Retail Leverage (kimpremium.com)
+    "kr_leverage_summary": tool_kr_leverage_summary,
+    "kr_leverage_series": tool_kr_leverage_series,
+    "kr_leverage_etf": tool_kr_leverage_etf,
 }
 
 

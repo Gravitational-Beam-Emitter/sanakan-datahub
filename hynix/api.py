@@ -45,6 +45,13 @@ from hynix.pipeline import (
     fetch_latest,
     init_pipeline,
 )
+from hynix.kimpremium import fetch_and_store as kimpremium_fetch
+from hynix.storage import (
+    get_kr_leverage_latest,
+    get_kr_leverage_series,
+    get_kr_leverage_etf,
+    get_kr_leverage_full_snapshot,
+)
 
 logger = logging.getLogger("hynix.api")
 
@@ -262,6 +269,81 @@ def fetch_status(days: int = Query(7, le=30)):
         return {"count": len(records), "logs": records}
     finally:
         conn.close()
+
+
+# ── Korean Retail Leverage (kimpremium.com) ───────────────────
+
+@app.get("/api/v1/kr-leverage/summary")
+def kr_leverage_summary():
+    """Get the latest Korean retail leverage KPI snapshot."""
+    conn = init_db(read_only=True)
+    try:
+        result = get_kr_leverage_latest(conn)
+        if result is None:
+            raise HTTPException(status_code=404, detail="No leverage data available")
+        return result
+    finally:
+        conn.close()
+
+
+@app.get("/api/v1/kr-leverage/snapshot")
+def kr_leverage_snapshot(date: Optional[str] = Query(None, description="Date YYYY-MM-DD, omit for latest")):
+    """Get full snapshot for a date: daily indicators + ETF data + meta."""
+    conn = init_db(read_only=True)
+    try:
+        result = get_kr_leverage_full_snapshot(conn, date)
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"No data for {date or 'latest'}")
+        return result
+    finally:
+        conn.close()
+
+
+@app.get("/api/v1/kr-leverage/series")
+def kr_leverage_series(
+    indicator: str = Query("r2", description="Indicator: r2, p10, kospi, spx, fin, dep, liq, mg, util, ..."),
+    start: Optional[str] = Query(None, description="Start date YYYY-MM-DD"),
+    end: Optional[str] = Query(None, description="End date YYYY-MM-DD"),
+    limit: int = Query(500, ge=1, le=2000),
+):
+    """Get a single-indicator time series from the daily leverage table."""
+    conn = init_db(read_only=True)
+    try:
+        df = get_kr_leverage_series(conn, indicator=indicator, start=start, end=end, limit=limit)
+        if df.empty:
+            raise HTTPException(status_code=404, detail=f"No data for indicator '{indicator}'")
+        records = df.to_dict(orient="records")
+        _serialize_records(records)
+        return {"indicator": indicator, "count": len(records), "data": records}
+    finally:
+        conn.close()
+
+
+@app.get("/api/v1/kr-leverage/etf")
+def kr_leverage_etf_series(
+    indicator: str = Query("thermo", description="Indicator: thermo, thermoW, flow, flowW, cumFlow, cumFlowW"),
+    start: Optional[str] = Query(None, description="Start date YYYY-MM-DD"),
+    end: Optional[str] = Query(None, description="End date YYYY-MM-DD"),
+    limit: int = Query(500, ge=1, le=2000),
+):
+    """Get a single-indicator time series from the ETF daily table."""
+    conn = init_db(read_only=True)
+    try:
+        df = get_kr_leverage_etf(conn, indicator=indicator, start=start, end=end, limit=limit)
+        if df.empty:
+            raise HTTPException(status_code=404, detail=f"No ETF data for indicator '{indicator}'")
+        records = df.to_dict(orient="records")
+        _serialize_records(records)
+        return {"indicator": indicator, "count": len(records), "data": records}
+    finally:
+        conn.close()
+
+
+@app.post("/api/v1/kr-leverage/fetch")
+def trigger_kimpremium_fetch():
+    """Fetch latest Korean retail leverage data from kimpremium.com."""
+    result = kimpremium_fetch()
+    return {"status": "completed", "result": result}
 
 
 # ── Fetch Triggers ────────────────────────────────────────────

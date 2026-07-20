@@ -2,11 +2,14 @@
 Storage layer — DuckDB-backed store for SK Hynix cross-market arbitrage data.
 
 Tables:
-  hynix_instruments     — Master instrument catalog
-  hynix_daily_prices    — Daily OHLCV + NAV for all instruments
-  hynix_fx_rates        — Daily FX rates
-  hynix_arbitrage       — Computed premium/discount vs base
-  hynix_fetch_log       — Fetch audit trail
+  hynix_instruments       — Master instrument catalog
+  hynix_daily_prices      — Daily OHLCV + NAV for all instruments
+  hynix_fx_rates          — Daily FX rates
+  hynix_arbitrage         — Computed premium/discount vs base
+  hynix_fetch_log         — Fetch audit trail
+  kr_leverage_daily       — Korean retail leverage daily series (kimpremium.com)
+  kr_leverage_etf_daily   — Leveraged ETF daily flow data (kimpremium.com)
+  kr_leverage_meta        — Latest KPI snapshots (kimpremium.com)
 """
 
 from __future__ import annotations
@@ -118,6 +121,62 @@ def init_db(db_path: Optional[str] = None, read_only: bool = False) -> duckdb.Du
             arbitrage_count INTEGER DEFAULT 0,
             errors TEXT DEFAULT '',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        )
+    """)
+
+    # -- kimpremium: Korean retail leverage daily series --
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS kr_leverage_daily (
+            date DATE NOT NULL PRIMARY KEY,
+            r2 DOUBLE,
+            p10 DOUBLE,
+            kospi DOUBLE,
+            kosdaq DOUBLE,
+            spx DOUBLE,
+            fin DOUBLE,
+            finKospi DOUBLE,
+            finKosdaq DOUBLE,
+            dep DOUBLE,
+            derivDep DOUBLE,
+            rp DOUBLE,
+            col DOUBLE,
+            misu DOUBLE,
+            liq DOUBLE,
+            liqR DOUBLE,
+            r1 DOUBLE,
+            r1p DOUBLE,
+            r1q DOUBLE,
+            mcap DOUBLE,
+            loan DOUBLE,
+            mg DOUBLE,
+            util DOUBLE
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS kr_leverage_etf_daily (
+            date DATE NOT NULL PRIMARY KEY,
+            r2 DOUBLE,
+            thermo DOUBLE,
+            thermoW DOUBLE,
+            flow DOUBLE,
+            flowW DOUBLE,
+            cumFlow DOUBLE,
+            cumFlowW DOUBLE
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS kr_leverage_meta (
+            id INTEGER PRIMARY KEY DEFAULT 1,
+            generated VARCHAR,
+            asof_date VARCHAR,
+            range_start VARCHAR,
+            range_end VARCHAR,
+            range_rows INTEGER,
+            kpi_json VARCHAR,
+            etf_kpi_json VARCHAR,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
 
@@ -438,3 +497,230 @@ def get_fetch_status(conn: duckdb.DuckDBPyConnection, days: int = 7) -> pd.DataF
         WHERE fetch_date >= (SELECT MAX(fetch_date) FROM hynix_fetch_log) - ?
         ORDER BY fetch_date DESC
     """, [days]).df()
+
+
+# ═══════════════════════════════════════════════════════════════
+#  Korean retail leverage (kimpremium.com)
+# ═══════════════════════════════════════════════════════════════
+
+_SERIES_COLS = [
+    "r2", "p10", "kospi", "kosdaq", "spx", "fin", "finKospi", "finKosdaq",
+    "dep", "derivDep", "rp", "col", "misu", "liq", "liqR", "r1", "r1p",
+    "r1q", "mcap", "loan", "mg", "util",
+]
+
+_ETF_COLS = ["r2", "thermo", "thermoW", "flow", "flowW", "cumFlow", "cumFlowW"]
+
+
+def upsert_kr_leverage_daily(conn: duckdb.DuckDBPyConnection, df: pd.DataFrame) -> int:
+    """Batch insert/update kr_leverage_daily. Returns row count."""
+    if df.empty:
+        return 0
+    avail = [c for c in _SERIES_COLS if c in df.columns]
+    sub = df[["date"] + avail].copy()
+    conn.register("_tmp_kld", sub)
+    cols_sql = ", ".join(avail)
+    excluded_sql = ", ".join(f"{c}=excluded.{c}" for c in avail)
+    rows = conn.execute(f"""
+        INSERT INTO kr_leverage_daily (date, {cols_sql})
+        SELECT date, {cols_sql} FROM _tmp_kld
+        ON CONFLICT (date) DO UPDATE SET {excluded_sql}
+    """).fetchall()
+    conn.unregister("_tmp_kld")
+    return rows[0][0] if rows else 0
+
+
+def upsert_kr_leverage_etf(conn: duckdb.DuckDBPyConnection, df: pd.DataFrame) -> int:
+    """Batch insert/update kr_leverage_etf_daily. Returns row count."""
+    if df.empty:
+        return 0
+    avail = [c for c in _ETF_COLS if c in df.columns]
+    sub = df[["date"] + avail].copy()
+    conn.register("_tmp_kle", sub)
+    cols_sql = ", ".join(avail)
+    excluded_sql = ", ".join(f"{c}=excluded.{c}" for c in avail)
+    rows = conn.execute(f"""
+        INSERT INTO kr_leverage_etf_daily (date, {cols_sql})
+        SELECT date, {cols_sql} FROM _tmp_kle
+        ON CONFLICT (date) DO UPDATE SET {excluded_sql}
+    """).fetchall()
+    conn.unregister("_tmp_kle")
+    return rows[0][0] if rows else 0
+
+
+def upsert_kr_leverage_meta(
+    conn: duckdb.DuckDBPyConnection,
+    meta_raw: Dict,
+    etf_kpi: Dict,
+) -> int:
+    """Upsert meta row (single-row table, id=1). Returns 1 on success."""
+    generated = meta_raw.get("generated", "")
+    asof = meta_raw.get("asof", "")
+    rng = meta_raw.get("range", {})
+    range_start = rng.get("start", "")
+    range_end = rng.get("end", "")
+    range_rows_val = rng.get("rows", 0)
+    kpi_json = json.dumps(meta_raw.get("kpi", {}), ensure_ascii=False)
+    etf_kpi_json = json.dumps(etf_kpi, ensure_ascii=False)
+
+    conn.execute("""
+        INSERT INTO kr_leverage_meta (id, generated, asof_date, range_start, range_end,
+                                      range_rows, kpi_json, etf_kpi_json)
+        VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT (id) DO UPDATE SET
+            generated = excluded.generated,
+            asof_date = excluded.asof_date,
+            range_start = excluded.range_start,
+            range_end = excluded.range_end,
+            range_rows = excluded.range_rows,
+            kpi_json = excluded.kpi_json,
+            etf_kpi_json = excluded.etf_kpi_json,
+            updated_at = now()
+    """, [generated, asof, range_start, range_end, range_rows_val, kpi_json, etf_kpi_json])
+    return 1
+
+
+def get_kr_leverage_latest(conn: duckdb.DuckDBPyConnection) -> Optional[Dict[str, Any]]:
+    """Get the latest KPI snapshot with meta info."""
+    meta_row = conn.execute("""
+        SELECT generated, asof_date, range_start, range_end, range_rows,
+               kpi_json, etf_kpi_json, updated_at
+        FROM kr_leverage_meta WHERE id = 1
+    """).fetchone()
+
+    if meta_row is None:
+        return None
+
+    latest_date_row = conn.execute(
+        "SELECT MAX(date) FROM kr_leverage_daily"
+    ).fetchone()
+    etf_latest = conn.execute(
+        "SELECT MAX(date) FROM kr_leverage_etf_daily"
+    ).fetchone()
+
+    return {
+        "generated": meta_row[0],
+        "asof": meta_row[1],
+        "range_start": meta_row[2],
+        "range_end": meta_row[3],
+        "range_rows": meta_row[4],
+        "latest_daily_date": str(latest_date_row[0]) if latest_date_row[0] else None,
+        "latest_etf_date": str(etf_latest[0]) if etf_latest[0] else None,
+        "kpi": json.loads(meta_row[5]) if meta_row[5] else {},
+        "etf_kpi": json.loads(meta_row[6]) if meta_row[6] else {},
+    }
+
+
+def get_kr_leverage_series(
+    conn: duckdb.DuckDBPyConnection,
+    indicator: str = "r2",
+    start: str = None,
+    end: str = None,
+    limit: int = 500,
+) -> pd.DataFrame:
+    """Get a time series from kr_leverage_daily.
+
+    Args:
+        indicator: one of _SERIES_COLS
+        start/end: date filters
+        limit: max rows
+    """
+    valid_cols = _SERIES_COLS
+    if indicator not in valid_cols:
+        raise ValueError(f"Unknown indicator '{indicator}'. Valid: {valid_cols}")
+
+    where = [f"{indicator} IS NOT NULL"]
+    params: list = []
+    if start:
+        where.append("date >= ?")
+        params.append(_norm_date(start))
+    if end:
+        where.append("date <= ?")
+        params.append(_norm_date(end))
+    params.append(limit)
+
+    return conn.execute(f"""
+        SELECT date, {indicator} AS value
+        FROM kr_leverage_daily
+        WHERE {' AND '.join(where)}
+        ORDER BY date DESC
+        LIMIT ?
+    """, params).df()
+
+
+def get_kr_leverage_etf(
+    conn: duckdb.DuckDBPyConnection,
+    indicator: str = "thermo",
+    start: str = None,
+    end: str = None,
+    limit: int = 500,
+) -> pd.DataFrame:
+    """Get a time series from kr_leverage_etf_daily."""
+    valid_cols = _ETF_COLS
+    if indicator not in valid_cols:
+        raise ValueError(f"Unknown ETF indicator '{indicator}'. Valid: {valid_cols}")
+
+    where = [f"{indicator} IS NOT NULL"]
+    params: list = []
+    if start:
+        where.append("date >= ?")
+        params.append(_norm_date(start))
+    if end:
+        where.append("date <= ?")
+        params.append(_norm_date(end))
+    params.append(limit)
+
+    return conn.execute(f"""
+        SELECT date, {indicator} AS value
+        FROM kr_leverage_etf_daily
+        WHERE {' AND '.join(where)}
+        ORDER BY date DESC
+        LIMIT ?
+    """, params).df()
+
+
+def get_kr_leverage_full_snapshot(
+    conn: duckdb.DuckDBPyConnection,
+    date: str = None,
+) -> Optional[Dict[str, Any]]:
+    """Get the full snapshot for a date (or latest): daily row + indicators."""
+    if date:
+        target = _norm_date(date)
+    else:
+        row = conn.execute("SELECT MAX(date) FROM kr_leverage_daily").fetchone()
+        if row is None or row[0] is None:
+            return None
+        target = str(row[0])
+
+    daily = conn.execute("""
+        SELECT * FROM kr_leverage_daily WHERE date = ?
+    """, [target]).fetchone()
+
+    if daily is None:
+        return None
+
+    cols = [desc[0] for desc in conn.description]
+    daily_dict = dict(zip(cols, daily))
+    for k, v in daily_dict.items():
+        if hasattr(v, "isoformat"):
+            daily_dict[k] = v.isoformat()[:10]
+
+    # ETF for same date
+    etf = conn.execute("""
+        SELECT * FROM kr_leverage_etf_daily WHERE date = ?
+    """, [target]).fetchone()
+
+    etf_dict = None
+    if etf:
+        cols2 = [desc[0] for desc in conn.description]
+        etf_dict = dict(zip(cols2, etf))
+        for k, v in etf_dict.items():
+            if hasattr(v, "isoformat"):
+                etf_dict[k] = v.isoformat()[:10]
+
+    return {
+        "date": target,
+        "daily": daily_dict,
+        "etf": etf_dict,
+        "meta": get_kr_leverage_latest(conn),
+    }

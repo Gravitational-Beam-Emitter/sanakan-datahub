@@ -2175,3 +2175,67 @@ export async function triggerHynixFetch(date?: string): Promise<void> {
   const params = date ? `?date=${date}` : "";
   await fetch(`${HYNIX_API}/api/v1/fetch${params}`, { method: "POST" });
 }
+
+/* ── Korean Retail Leverage (kimpremium.com via :8008) ── */
+
+export interface KrLeverageSummary {
+  generated: string;
+  asof: string;
+  range: { start: string; end: string; rows: number };
+  latest_daily_date: string | null;
+  latest_etf_date: string | null;
+  kpi: Record<string, number | string | null>;
+  etf_kpi: Record<string, unknown>;
+  latest_daily: {
+    date: string;
+    r2: number | null;
+    r2_10y_pct: number | null;
+    kospi: number | null;
+    spx: number | null;
+    fin_trillion: number | null;
+    dep_trillion: number | null;
+    liq_100m: number | null;
+    liq_ratio: number | null;
+    mcap_gdp_pct: number | null;
+    credit_util_pct: number | null;
+    misu_trillion: number | null;
+  } | null;
+}
+
+export interface KrLeverageSeriesPoint {
+  date: string;
+  value: number | null;
+}
+
+export async function fetchKrLeverageSummary(): Promise<KrLeverageSummary | null> {
+  const res = await fetch(`${HYNIX_API}/api/v1/kr-leverage/summary`, {
+    next: { revalidate: 300 },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export async function fetchKrLeverageSeries(
+  indicator: string,
+  limit = 500,
+): Promise<{ indicator: string; count: number; data: KrLeverageSeriesPoint[] } | null> {
+  const res = await fetch(
+    `${HYNIX_API}/api/v1/kr-leverage/series?indicator=${indicator}&limit=${limit}`,
+    { next: { revalidate: 300 }, signal: AbortSignal.timeout(10000) },
+  );
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export async function fetchKrLeverageETF(
+  indicator: string,
+  limit = 500,
+): Promise<{ indicator: string; count: number; data: KrLeverageSeriesPoint[] } | null> {
+  const res = await fetch(
+    `${HYNIX_API}/api/v1/kr-leverage/etf?indicator=${indicator}&limit=${limit}`,
+    { next: { revalidate: 300 }, signal: AbortSignal.timeout(10000) },
+  );
+  if (!res.ok) return null;
+  return res.json();
+}

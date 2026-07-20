@@ -15,6 +15,7 @@ import {
 } from "@/lib/api";
 import HynixArbTable from "./HynixArbTable";
 import HynixPremiumChart from "./HynixPremiumChart";
+import KrLeverageContent from "./KrLeverageContent";
 
 export default function HynixContent({
   snapshot,
@@ -26,7 +27,7 @@ export default function HynixContent({
   targetDate: string;
 }) {
   const [tab, setTab] = useState<
-    "arbitrage" | "adr" | "leverage" | "guide"
+    "arbitrage" | "adr" | "leverage" | "kr-leverage" | "guide"
   >("arbitrage");
   const [selectedDate, setSelectedDate] = useState(targetDate);
   const [currentSnapshot, setCurrentSnapshot] = useState(snapshot);
@@ -71,6 +72,7 @@ export default function HynixContent({
     { key: "arbitrage" as const, label: "折溢价对比" },
     { key: "adr" as const, label: "ADR 机制分析" },
     { key: "leverage" as const, label: "杠杆产品分析" },
+    { key: "kr-leverage" as const, label: "韩国散户杠杆" },
     { key: "guide" as const, label: "接入指南" },
   ];
 
@@ -198,6 +200,9 @@ export default function HynixContent({
           </div>
         </div>
       )}
+
+      {/* Korean Retail Leverage tab */}
+      {tab === "kr-leverage" && <KrLeverageContent />}
 
       {/* ADR Analysis tab */}
       {tab === "adr" && <AdrAnalysis />}
