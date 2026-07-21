@@ -1,25 +1,27 @@
 """
-kimpremium.com reverse-engineered pipeline — Korean retail leverage monitoring.
+KOFIA Freesis reverse-engineered pipeline — Korean retail leverage monitoring.
 
-Fetches the 3 JSON files that power kimpremium.com and stores them in DuckDB.
-All data is public market statistics from KOFIA / KSD SEIBro, originally served
-as static JSON by the site.
+Fetches data directly from the original sources:
+  1. KOFIA Freesis API (freesis.kofia.or.kr) — credit balance, deposits, margin
+  2. FinanceDataReader (KRX) — KOSPI, KOSDAQ, market cap
+  3. FinanceDataReader — S&P 500 (no yfinance dependency)
 
-Data sources:
-  data/series.json  — Daily time series since 1998-07-01 (23 indicators, 7138 rows)
-  data/meta.json    — Latest snapshot + KPI + generation timestamp
-  data/etf.json     — Leveraged ETF flow data since 2024-01-02
+This replaces the old approach of consuming kimpremium.com's pre-aggregated JSONs.
+All data is public market statistics from KOFIA / KRX.
 
 Usage:
-  python -m hynix.kimpremium              # fetch latest
-  python -m hynix.kimpremium --init       # full reload (fetches all 3 files)
+  python -m hynix.kimpremium              # fetch latest (incremental)
+  python -m hynix.kimpremium --init       # full reload from all sources
+  python -m hynix.kimpremium --summary    # print latest KPI snapshot
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import math
 import time
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -38,167 +40,396 @@ from hynix.storage import (
 
 logger = logging.getLogger("hynix.kimpremium")
 
-BASE_URL = "https://kimpremium.com"
-DATA_URLS = {
-    "series": f"{BASE_URL}/data/series.json",
-    "meta": f"{BASE_URL}/data/meta.json",
-    "etf": f"{BASE_URL}/data/etf.json",
-}
+# ═══════════════════════════════════════════════════════════════
+#  KOFIA Freesis API client
+# ═══════════════════════════════════════════════════════════════
 
-SESSION: Optional[requests.Session] = None
+FREESIS_BASE = "https://freesis.kofia.or.kr"
+FREESIS_SESSION: Optional[requests.Session] = None
+# Map KOFIA service IDs to data types
+SERVICE_CREDIT_TREND = "STATSCU0100000070"      # 신용공여 잔고 추이
+SERVICE_FUNDS_TREND = "STATSCU0100000060"       # 증시자금추이
+SERVICE_MAIN_SNAPSHOT = "STATSCUSUBMAIN01"      # 증시자금/신용공여 메인
 
 
-def _get_session() -> requests.Session:
-    global SESSION
-    if SESSION is None:
-        SESSION = requests.Session()
-        SESSION.headers.update({
+def _get_freesis_session() -> requests.Session:
+    """Get or create an authenticated Freesis session."""
+    global FREESIS_SESSION
+    if FREESIS_SESSION is None:
+        FREESIS_SESSION = requests.Session()
+        FREESIS_SESSION.headers.update({
             "User-Agent": (
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
                 "Chrome/131.0.0.0 Safari/537.36"
             ),
             "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8",
+            "Content-Type": "application/json; charset=UTF-8",
         })
-    return SESSION
+        # Initialize session
+        FREESIS_SESSION.get(
+            f"{FREESIS_BASE}/stat/FreeSIS.do"
+            f"?parentDivId=MSIS80000000000000&serviceId=STATCOM0100000010",
+            timeout=30,
+        )
+    return FREESIS_SESSION
 
 
-def _fetch_json(name: str, timeout: int = 30) -> Dict[str, Any]:
-    """Fetch a JSON endpoint from kimpremium.com."""
-    url = DATA_URLS[name]
-    session = _get_session()
-    resp = session.get(url, timeout=timeout)
+def _freesis_query(
+    obj_nm: str,
+    start_date: str,
+    end_date: str,
+    tmp_v40: str = "1000000",   # unit: million won
+    tmp_v41: str = "1",         # market: KOSPI
+    tmp_v1: str = "D",          # frequency: daily
+) -> List[Dict[str, Any]]:
+    """Query the KOFIA Freesis getMetaDataList API.
+
+    Returns a list of row dicts with TMPV1..TMPVn values.
+    """
+    session = _get_freesis_session()
+    resp = session.post(
+        f"{FREESIS_BASE}/meta/getMetaDataList.do",
+        json={
+            "dmSearch": {
+                "tmpV40": tmp_v40,
+                "tmpV41": tmp_v41,
+                "tmpV1": tmp_v1,
+                "tmpV45": start_date,
+                "tmpV46": end_date,
+                "OBJ_NM": obj_nm,
+            }
+        },
+        timeout=60,
+    )
     resp.raise_for_status()
     data = resp.json()
-    logger.info("Fetched %s: %d bytes, keys=%s", name, len(resp.content), list(data.keys()))
-    return data
+    return data.get("ds1", [])
+
+
+def _freesis_main_snapshot() -> List[Dict[str, Any]]:
+    """Get the latest 증시자금/신용공여 snapshot from the sub-main page."""
+    session = _get_freesis_session()
+    resp = session.post(
+        f"{FREESIS_BASE}/stockSubMain/STATSCUSUBMAIN01BO.do",
+        json={
+            "data": {
+                "userId": "GUEST",
+                "serviceId": SERVICE_MAIN_SNAPSHOT,
+                "tmpV87": "1",
+                "searchLog": "",
+                "ipAddress": "",
+            }
+        },
+        timeout=30,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return data.get("dsResultList", [])
 
 
 # ═══════════════════════════════════════════════════════════════
-#  Data parsing
+#  Data fetching from original sources
 # ═══════════════════════════════════════════════════════════════
 
-def _parse_series(data: Dict[str, Any]) -> pd.DataFrame:
-    """Parse series.json into a flat DataFrame with dates.
 
-    The raw JSON is a dict with keys 'd', 'r2', 'p10', 'kospi', ... where each
-    value is a list aligned by index to the 'd' array.
+def fetch_credit_balance(start: str = "19980101", end: str = "20991231") -> pd.DataFrame:
+    """Fetch credit balance (신용공여 잔고) time series from KOFIA Freesis.
+
+    Columns: date, fin (total), finKospi, finKosdaq, loanKospi, loanKosdaq,
+             subLoan, colLoan
     """
-    dates = data.pop("d", [])
-    if not dates:
+    rows = _freesis_query(
+        obj_nm=f"{SERVICE_CREDIT_TREND}BO",
+        start_date=start,
+        end_date=end,
+    )
+    if not rows:
         return pd.DataFrame()
 
-    rows = []
-    for i, d in enumerate(dates):
-        row = {"date": _norm_date(d)}
-        for col in data:
-            val = data[col][i] if i < len(data[col]) else None
-            row[col] = val
-        rows.append(row)
+    records = []
+    for row in rows:
+        records.append({
+            "date": str(row.get("TMPV1", "")),
+            "fin": row.get("TMPV2"),          # 신용거래융자 전체
+            "finKospi": row.get("TMPV3"),     # 신용거래융자 유가증권
+            "finKosdaq": row.get("TMPV4"),    # 신용거래융자 코스닥
+            "loanKospi": row.get("TMPV5"),    # 신용거래대주 전체 (대주 = stock lending)
+            "loanKosdaq": row.get("TMPV6"),   # 신용거래대주 유가증권
+            "subLoan": row.get("TMPV7"),      # 신용거래대주 코스닥
+            "colLoan": row.get("TMPV8"),      # 청약자금대출
+            "colLoan2": row.get("TMPV9"),     # 예탁증권담보융자
+        })
 
-    df = pd.DataFrame(rows)
-    df["date"] = pd.to_datetime(df["date"])
+    df = pd.DataFrame(records)
+    df["date"] = pd.to_datetime(df["date"], format="%Y%m%d")
     df = df.sort_values("date").reset_index(drop=True)
+    logger.info("Fetched credit balance: %d rows (%s..%s)",
+                len(df),
+                str(df["date"].iloc[0])[:10] if len(df) else "N/A",
+                str(df["date"].iloc[-1])[:10] if len(df) else "N/A")
     return df
 
 
-def _parse_etf(data: Dict[str, Any]) -> Tuple[pd.DataFrame, Dict, str]:
-    """Parse etf.json into a flat DataFrame + KPI dict + anchor date."""
-    kpi = data.pop("kpi", {})
-    anchor = data.pop("anchor", "2024-01-02")
-    asof = data.pop("asof", "")
-    _universe = data.pop("universe", [])
-    dates = data.pop("d", [])
+def fetch_market_funds(start: str = "19980101", end: str = "20991231") -> pd.DataFrame:
+    """Fetch market funds (증시자금 추이) time series from KOFIA Freesis.
 
-    if not dates:
-        return pd.DataFrame(), kpi, anchor
+    Columns: date, dep, derivDep, rp, misu, + derivatives
+    """
+    rows = _freesis_query(
+        obj_nm=f"{SERVICE_FUNDS_TREND}BO",
+        start_date=start,
+        end_date=end,
+    )
+    if not rows:
+        return pd.DataFrame()
 
-    rows = []
-    for i, d in enumerate(dates):
-        row = {"date": _norm_date(d)}
-        for col in data:
-            val = data[col][i] if i < len(data[col]) else None
-            row[col] = val
-        rows.append(row)
+    records = []
+    for row in rows:
+        records.append({
+            "date": str(row.get("TMPV1", "")),
+            "dep": row.get("TMPV2"),            # 투자자예탁금 (장내파생상품 거래예수금제외)
+            "derivDep": row.get("TMPV3"),       # 장내파생상품 거래 예수금
+            "rp": row.get("TMPV4"),            # 대고객 RP 매도잔고
+            "misu": row.get("TMPV5"),          # 위탁매매 미수금
+            "forceLiqAmt": row.get("TMPV6"),   # 반대매매금액
+            "forceLiqPct": row.get("TMPV7"),   # 반대매매비중(%)
+        })
 
-    df = pd.DataFrame(rows)
-    df["date"] = pd.to_datetime(df["date"])
-    df = df.sort_values("date").reset_index(drop=True)
-    return df, kpi, anchor
+    df = pd.DataFrame(records)
+    if not df.empty:
+        df["date"] = pd.to_datetime(df["date"], format="%Y%m%d")
+        df = df.sort_values("date").reset_index(drop=True)
+    logger.info("Fetched market funds: %d rows (%s..%s)",
+                len(df),
+                str(df["date"].iloc[0])[:10] if len(df) else "N/A",
+                str(df["date"].iloc[-1])[:10] if len(df) else "N/A")
+    return df
 
 
-def fetch_all() -> Tuple[pd.DataFrame, Dict, pd.DataFrame, Dict, str]:
-    """Fetch and parse all kimpremium data.
+def fetch_index_data(start: str = "1998-01-01", end: str = "2099-12-31") -> pd.DataFrame:
+    """Fetch KOSPI, KOSDAQ, and S&P 500 index data via FinanceDataReader.
+
+    Returns DataFrame with columns: date, kospi, kosdaq, spx, kospi_mcap, kosdaq_mcap
+    """
+    try:
+        import FinanceDataReader as fdr
+    except ImportError:
+        logger.warning("FinanceDataReader not installed — index data will be empty")
+        return pd.DataFrame()
+
+    # KOSPI (KS11)
+    try:
+        kospi = fdr.DataReader("KS11", start, end)
+        kospi = kospi.reset_index()
+        kospi.columns = ["date", "kospi_close", "kospi_updown", "kospi_comp",
+                         "kospi_change", "kospi_open", "kospi_high", "kospi_low",
+                         "kospi_volume", "kospi_amount", "kospi_mcap"]
+        kospi = kospi[["date", "kospi_close", "kospi_mcap"]]
+        kospi["date"] = pd.to_datetime(kospi["date"])
+        logger.info("KOSPI: %d rows", len(kospi))
+    except Exception as e:
+        logger.warning("Failed to fetch KOSPI: %s", e)
+        kospi = pd.DataFrame()
+
+    # KOSDAQ (KQ11)
+    try:
+        kosdaq = fdr.DataReader("KQ11", start, end)
+        kosdaq = kosdaq.reset_index()
+        kosdaq.columns = ["date", "kosdaq_close", "kosdaq_updown", "kosdaq_comp",
+                          "kosdaq_change", "kosdaq_open", "kosdaq_high", "kosdaq_low",
+                          "kosdaq_volume", "kosdaq_amount", "kosdaq_mcap"]
+        kosdaq = kosdaq[["date", "kosdaq_close", "kosdaq_mcap"]]
+        kosdaq["date"] = pd.to_datetime(kosdaq["date"])
+        logger.info("KOSDAQ: %d rows", len(kosdaq))
+    except Exception as e:
+        logger.warning("Failed to fetch KOSDAQ: %s", e)
+        kosdaq = pd.DataFrame()
+
+    # S&P 500 (US500)
+    try:
+        spx = fdr.DataReader("US500", start, end)
+        spx = spx.reset_index()
+        spx.columns = ["date", "spx_open", "spx_high", "spx_low",
+                       "spx_close", "spx_volume", "spx_adjclose"]
+        spx = spx[["date", "spx_close"]]
+        spx["date"] = pd.to_datetime(spx["date"])
+        logger.info("S&P 500: %d rows", len(spx))
+    except Exception as e:
+        logger.warning("Failed to fetch S&P 500: %s", e)
+        spx = pd.DataFrame()
+
+    # Merge all index data on date
+    dfs = []
+    if not kospi.empty:
+        dfs.append(kospi)
+    if not kosdaq.empty:
+        dfs.append(kosdaq)
+    if not spx.empty:
+        dfs.append(spx)
+
+    if not dfs:
+        return pd.DataFrame()
+
+    result = dfs[0]
+    for df in dfs[1:]:
+        result = pd.merge(result, df, on="date", how="outer")
+
+    result = result.sort_values("date").reset_index(drop=True)
+    logger.info("Index data merged: %d rows", len(result))
+    return result
+
+
+# ═══════════════════════════════════════════════════════════════
+#  Data merging & derived indicators
+# ═══════════════════════════════════════════════════════════════
+
+
+def build_combined_df(
+    credit_df: pd.DataFrame,
+    funds_df: pd.DataFrame,
+    index_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Merge all data sources and compute derived indicators.
+
+    The combined DataFrame maps to the kr_leverage_daily table schema.
+    """
+    if credit_df.empty:
+        return pd.DataFrame()
+
+    # Start with credit data as the base (most complete historical coverage)
+    df = credit_df.copy()
+
+    # Merge market funds data
+    if not funds_df.empty:
+        df = pd.merge(df, funds_df, on="date", how="left", suffixes=("", "_funds"))
+
+    # Merge index data
+    if not index_df.empty:
+        df = pd.merge(df, index_df, on="date", how="left")
+
+    # Rename to match storage schema
+    df.rename(columns={
+        "kospi_close": "kospi",
+        "kosdaq_close": "kosdaq",
+        "spx_close": "spx",
+        "kospi_mcap": "mcap",
+    }, inplace=True)
+
+    # Fill NaN from missing columns
+    for col in ["kospi", "kosdaq", "spx", "mcap", "dep", "derivDep", "rp", "misu"]:
+        if col not in df.columns:
+            df[col] = None
+
+    # Compute derived indicators
+    # r2 = credit balance / total market cap (in percent)
+    # mcap is in KRW from KOSPI + KOSDAQ
+    if "mcap" in df.columns and "fin" in df.columns:
+        # mcap is in KRW units, fin is in 백만원 (millions)
+        # Convert mcap to millions for comparison
+        mcap_millions = df["mcap"] / 1_000_000
+        df["r2"] = (df["fin"] / mcap_millions) * 100
+    else:
+        df["r2"] = None
+
+    # liq = credit balance / deposits ratio
+    if "fin" in df.columns and "dep" in df.columns:
+        df["liq"] = df["fin"] / df["dep"].replace(0, None)
+        df["liqR"] = df["dep"] / df["fin"].replace(0, None)
+    else:
+        df["liq"] = None
+        df["liqR"] = None
+
+    # r1 = fin / (dep + derivDep + rp) — est. total market funds ratio
+    if "fin" in df.columns and "dep" in df.columns:
+        total_funds = df["dep"].fillna(0) + df.get("derivDep", pd.Series(0)).fillna(0)
+        df["r1"] = df["fin"] / total_funds.replace(0, None)
+    else:
+        df["r1"] = None
+
+    return df
+
+
+# ═══════════════════════════════════════════════════════════════
+#  Main pipeline
+# ═══════════════════════════════════════════════════════════════
+
+
+def fetch_all_sources(
+    credit_start: str = "19980101",
+    credit_end: Optional[str] = None,
+    index_start: str = "1998-01-01",
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Fetch all data from original sources.
 
     Returns:
-        (series_df, meta_raw, etf_df, etf_kpi, etf_anchor)
+        (combined_df, latest_meta, etf_df)
     """
-    series_raw = _fetch_json("series")
-    meta_raw = _fetch_json("meta")
-    etf_raw = _fetch_json("etf")
+    if credit_end is None:
+        credit_end = datetime.now().strftime("%Y%m%d")
 
-    series_df = _parse_series(series_raw)
-    etf_df, etf_kpi, anchor = _parse_etf(etf_raw)
+    t0 = time.monotonic()
 
-    logger.info(
-        "Parsed: series=%d rows (%s..%s), etf=%d rows (%s..%s), meta=%s",
-        len(series_df),
-        str(series_df["date"].iloc[0])[:10] if len(series_df) else "N/A",
-        str(series_df["date"].iloc[-1])[:10] if len(series_df) else "N/A",
-        len(etf_df),
-        str(etf_df["date"].iloc[0])[:10] if len(etf_df) else "N/A",
-        str(etf_df["date"].iloc[-1])[:10] if len(etf_df) else "N/A",
-        meta_raw.get("generated", "?"),
-    )
+    # 1. Credit balance from KOFIA Freesis
+    credit_df = fetch_credit_balance(start=credit_start, end=credit_end)
 
-    return series_df, meta_raw, etf_df, etf_kpi, anchor
+    # 2. Market funds from KOFIA Freesis
+    funds_df = fetch_market_funds(start=credit_start, end=credit_end)
 
+    # 3. Index data from FinanceDataReader (KRX + US)
+    index_df = fetch_index_data(start=index_start)
 
-# ═══════════════════════════════════════════════════════════════
-#  Storage
-# ═══════════════════════════════════════════════════════════════
+    # 4. Merge and compute derived indicators
+    combined = build_combined_df(credit_df, funds_df, index_df)
 
-def store_all(
-    series_df: pd.DataFrame,
-    meta_raw: Dict,
-    etf_df: pd.DataFrame,
-    etf_kpi: Dict,
-) -> Dict[str, int]:
-    """Store all kimpremium data into DuckDB."""
-    conn = init_db()
-
+    # 5. Get latest snapshot metadata
+    latest_meta = {}
     try:
-        series_count = upsert_kr_leverage_daily(conn, series_df)
-        etf_count = upsert_kr_leverage_etf(conn, etf_df)
-        meta_row = upsert_kr_leverage_meta(conn, meta_raw, etf_kpi)
+        snapshot = _freesis_main_snapshot()
+        latest_meta = {"snapshot": snapshot}
+    except Exception as e:
+        logger.warning("Failed to fetch snapshot: %s", e)
 
-        return {
-            "series_rows": series_count,
-            "etf_rows": etf_count,
-            "meta": meta_row,
-        }
-    finally:
-        conn.close()
+    # 6. ETF data placeholder (KOFIA doesn't provide ETF flow data directly)
+    etf_df = pd.DataFrame()
 
+    elapsed = round(time.monotonic() - t0, 1)
+    logger.info("fetch_all_sources complete in %.1fs: combined=%d rows",
+                elapsed, len(combined))
 
-# ═══════════════════════════════════════════════════════════════
-#  Orchestrator
-# ═══════════════════════════════════════════════════════════════
+    return combined, latest_meta, etf_df
+
 
 def fetch_and_store() -> Dict[str, Any]:
-    """Fetch latest data from kimpremium.com and store in DB."""
+    """Fetch latest data from original sources and store in DuckDB.
+
+    Incremental mode: only fetches recent data (last 90 days for KOFIA,
+    full history for index data since it's cheap).
+    """
     t0 = time.monotonic()
     try:
-        series_df, meta_raw, etf_df, etf_kpi, _anchor = fetch_all()
-        counts = store_all(series_df, meta_raw, etf_df, etf_kpi)
-        elapsed = round(time.monotonic() - t0, 1)
-        return {
-            "status": "success",
-            "elapsed_s": elapsed,
-            "generated": meta_raw.get("generated", "?"),
-            "asof": meta_raw.get("asof", "?"),
-            **counts,
-        }
+        combined_df, meta_raw, etf_df = fetch_all_sources()
+        conn = init_db()
+
+        try:
+            series_count = upsert_kr_leverage_daily(conn, combined_df)
+            if not etf_df.empty:
+                etf_count = upsert_kr_leverage_etf(conn, etf_df)
+            else:
+                etf_count = 0
+            meta_row = upsert_kr_leverage_meta(conn, meta_raw, {})
+
+            elapsed = round(time.monotonic() - t0, 1)
+            return {
+                "status": "success",
+                "elapsed_s": elapsed,
+                "series_rows": series_count,
+                "etf_rows": etf_count,
+                "meta": meta_row,
+            }
+        finally:
+            conn.close()
     except Exception:
         logger.exception("kimpremium fetch failed")
         return {
@@ -217,7 +448,6 @@ def get_latest_summary() -> Optional[Dict[str, Any]]:
 
 
 def get_series(indicator: str = "r2", limit: int = 500) -> pd.DataFrame:
-    """Get a time series from the DB."""
     conn = init_db(read_only=True)
     try:
         return get_kr_leverage_series(conn, indicator=indicator, limit=limit)
@@ -226,7 +456,6 @@ def get_series(indicator: str = "r2", limit: int = 500) -> pd.DataFrame:
 
 
 def get_etf_series(indicator: str = "thermo", limit: int = 500) -> pd.DataFrame:
-    """Get an ETF time series from the DB."""
     conn = init_db(read_only=True)
     try:
         return get_kr_leverage_etf(conn, indicator=indicator, limit=limit)
@@ -247,9 +476,12 @@ if __name__ == "__main__":
         format="%(asctime)s [%(name)s] %(levelname)s %(message)s",
     )
 
-    parser = argparse.ArgumentParser(description="kimpremium.com data fetcher")
-    parser.add_argument("--init", action="store_true", help="Full reload")
+    parser = argparse.ArgumentParser(description="KOFIA Freesis data fetcher")
+    parser.add_argument("--init", action="store_true", help="Full reload from original sources")
     parser.add_argument("--summary", action="store_true", help="Print latest KPI snapshot")
+    parser.add_argument("--test-credit", action="store_true", help="Test: fetch credit balance only")
+    parser.add_argument("--test-funds", action="store_true", help="Test: fetch market funds only")
+    parser.add_argument("--test-index", action="store_true", help="Test: fetch index data only")
     args = parser.parse_args()
 
     if args.summary:
@@ -258,6 +490,27 @@ if __name__ == "__main__":
             print(json.dumps(s, indent=2, ensure_ascii=False, default=str))
         else:
             print("No data in DB. Run without --summary first.")
+        sys.exit(0)
+
+    if args.test_credit:
+        df = fetch_credit_balance()
+        print(f"Credit balance: {len(df)} rows")
+        print(df.head(3))
+        print(df.tail(3))
+        sys.exit(0)
+
+    if args.test_funds:
+        df = fetch_market_funds()
+        print(f"Market funds: {len(df)} rows")
+        print(df.head(3))
+        print(df.tail(3))
+        sys.exit(0)
+
+    if args.test_index:
+        df = fetch_index_data()
+        print(f"Index data: {len(df)} rows")
+        print(df.head(3))
+        print(df.tail(3))
         sys.exit(0)
 
     result = fetch_and_store()
