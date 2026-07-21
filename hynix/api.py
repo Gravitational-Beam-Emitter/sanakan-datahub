@@ -346,6 +346,61 @@ def trigger_kimpremium_fetch():
     return {"status": "completed", "result": result}
 
 
+@app.get("/api/v1/kr-leverage/dump")
+def kr_leverage_dump(
+    start: Optional[str] = Query(None, description="Start date YYYY-MM-DD"),
+    end: Optional[str] = Query(None, description="End date YYYY-MM-DD"),
+):
+    """Get all indicators at once for charting. Returns daily + ETF data as parallel arrays."""
+    conn = init_db(read_only=True)
+    try:
+        daily_rows = conn.execute("""
+            SELECT * FROM kr_leverage_daily
+            WHERE (? IS NULL OR date >= ?) AND (? IS NULL OR date <= ?)
+            ORDER BY date
+        """, [start, start, end, end]).fetchall()
+
+        etf_rows = conn.execute("""
+            SELECT * FROM kr_leverage_etf_daily
+            WHERE (? IS NULL OR date >= ?) AND (? IS NULL OR date <= ?)
+            ORDER BY date
+        """, [start, start, end, end]).fetchall()
+
+        import math
+
+        def build(rows, col_names):
+            result = {}
+            arrays = {}
+            for row in rows:
+                d = str(row[0]) if hasattr(row[0], "isoformat") else str(row[0])
+                if "dates" not in result:
+                    result["dates"] = []
+                result["dates"].append(d)
+                for j, col in enumerate(col_names):
+                    if col == "date":
+                        continue
+                    if col not in arrays:
+                        arrays[col] = []
+                    val = row[j]
+                    if val is None or (isinstance(val, float) and (math.isnan(val) or math.isinf(val))):
+                        arrays[col].append(None)
+                    else:
+                        arrays[col].append(val)
+            result["series"] = arrays
+            return result
+
+        daily_cols = [desc[0] for desc in conn.description]
+        etf_cols = [desc[0] for desc in conn.description] if etf_rows else ["date"]
+
+        result = build(daily_rows, daily_cols)
+        etf_result = build(etf_rows, etf_cols)
+        result["etf_series"] = etf_result.get("series", {})
+
+        return result
+    finally:
+        conn.close()
+
+
 # ── Fetch Triggers ────────────────────────────────────────────
 
 @app.post("/api/v1/fetch")
