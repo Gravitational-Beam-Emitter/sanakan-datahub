@@ -354,17 +354,21 @@ def kr_leverage_dump(
     """Get all indicators at once for charting. Returns daily + ETF data as parallel arrays."""
     conn = init_db(read_only=True)
     try:
-        daily_rows = conn.execute("""
+        daily_cur = conn.execute("""
             SELECT * FROM kr_leverage_daily
             WHERE (? IS NULL OR date >= ?) AND (? IS NULL OR date <= ?)
             ORDER BY date
-        """, [start, start, end, end]).fetchall()
+        """, [start, start, end, end])
+        daily_rows = daily_cur.fetchall()
+        daily_cols = [desc[0] for desc in daily_cur.description]
 
-        etf_rows = conn.execute("""
+        etf_cur = conn.execute("""
             SELECT * FROM kr_leverage_etf_daily
             WHERE (? IS NULL OR date >= ?) AND (? IS NULL OR date <= ?)
             ORDER BY date
-        """, [start, start, end, end]).fetchall()
+        """, [start, start, end, end])
+        etf_rows = etf_cur.fetchall()
+        etf_cols = [desc[0] for desc in etf_cur.description] if etf_rows else ["date"]
 
         import math
 
@@ -388,9 +392,6 @@ def kr_leverage_dump(
                         arrays[col].append(val)
             result["series"] = arrays
             return result
-
-        daily_cols = [desc[0] for desc in conn.description]
-        etf_cols = [desc[0] for desc in conn.description] if etf_rows else ["date"]
 
         result = build(daily_rows, daily_cols)
         etf_result = build(etf_rows, etf_cols)
