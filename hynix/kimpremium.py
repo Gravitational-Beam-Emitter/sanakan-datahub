@@ -580,6 +580,67 @@ def _compute_kpi(df: pd.DataFrame) -> Dict[str, Any]:
     }
 
 
+def _fetch_kimpremium_etf() -> tuple[pd.DataFrame, Dict[str, Any]]:
+    """Fetch ETF flow data from kimpremium.com JSON.
+
+    Source: KSD SEIBro ETF creation/redemption statistics (설정/환매 통계)
+            + KSD SEIBro foreign securities custody TOP50 (외화증권 보관금액)
+
+    The KSD OpenAPI requires business registration in Korea to get an API key.
+    kimpremium.com processes this data and serves it as a pre-computed JSON,
+    updated daily. We use it as a convenience layer over the KSD API.
+
+    Returns:
+        (DataFrame, kpi_dict) where DataFrame has columns:
+        date, r2, thermo, thermoW, flow, flowW, cumFlow, cumFlowW
+    """
+    try:
+        resp = requests.get(
+            "https://kimpremium.com/data/etf.json",
+            headers={
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+                "Accept": "application/json",
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        logger.warning("Failed to fetch ETF data from kimpremium.com: %s", e)
+        return pd.DataFrame(), {}
+
+    kpi_raw = data.get("kpi", {})
+    etf_kpi = {
+        "thermo": kpi_raw.get("thermo"),
+        "thermoW": kpi_raw.get("thermoW"),
+        "n": kpi_raw.get("n"),
+        "nInv": kpi_raw.get("nInv"),
+        "aum": kpi_raw.get("aum"),
+        "aumInv": kpi_raw.get("aumInv"),
+    }
+
+    dates = data.get("d", [])
+    if not dates:
+        return pd.DataFrame(), etf_kpi
+
+    records = []
+    cols = ["r2", "thermo", "thermoW", "flow", "flowW", "cumFlow", "cumFlowW"]
+    for i, d in enumerate(dates):
+        row = {"date": pd.Timestamp(_norm_date(str(d)))}
+        for col in cols:
+            arr = data.get(col, [])
+            row[col] = arr[i] if i < len(arr) else None
+        records.append(row)
+
+    df = pd.DataFrame(records)
+    df = df.sort_values("date").reset_index(drop=True)
+    logger.info("ETF data fetched: %d rows (%s..%s)",
+                len(df),
+                str(df["date"].iloc[0])[:10] if len(df) else "N/A",
+                str(df["date"].iloc[-1])[:10] if len(df) else "N/A")
+    return df, etf_kpi
+
+
 def _compute_etf_df(df: pd.DataFrame) -> pd.DataFrame:
     """Compute ETF flow indicators from combined daily data.
 
@@ -653,11 +714,11 @@ def fetch_all_sources(
     credit_start: str = "19980101",
     credit_end: Optional[str] = None,
     index_start: str = "1998-01-01",
-) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+) -> Tuple[pd.DataFrame, Dict, pd.DataFrame, Dict]:
     """Fetch all data from original sources.
 
     Returns:
-        (combined_df, latest_meta, etf_df)
+        (combined_df, meta_raw, etf_df, etf_kpi)
     """
     if credit_end is None:
         credit_end = datetime.now().strftime("%Y%m%d")
@@ -691,8 +752,10 @@ def fetch_all_sources(
     except Exception as e:
         logger.warning("Failed to fetch snapshot: %s", e)
 
-    # 8. Compute ETF flow indicators from combined daily data
-    etf_df = _compute_etf_df(combined)
+    # 8. Fetch ETF flow data from kimpremium.com
+    #    Ultimate source: KSD SEIBro ETF creation/redemption stats + foreign custody TOP50
+    #    (KSD OpenAPI requires business registration in Korea; kimpremium serves it as JSON)
+    etf_df, etf_kpi = _fetch_kimpremium_etf()
 
     # 9. Compute KPI from the combined data
     kpi = _compute_kpi(combined)
@@ -712,7 +775,7 @@ def fetch_all_sources(
     logger.info("fetch_all_sources complete in %.1fs: combined=%d rows",
                 elapsed, len(combined))
 
-    return combined, meta_raw, etf_df
+    return combined, meta_raw, etf_df, etf_kpi
 
 
 def _compute_etf_kpi(etf_df: pd.DataFrame) -> Dict[str, Any]:
@@ -737,18 +800,16 @@ def fetch_and_store() -> Dict[str, Any]:
     """
     t0 = time.monotonic()
     try:
-        combined_df, meta_raw, etf_df = fetch_all_sources()
+        combined_df, meta_raw, etf_df, etf_kpi = fetch_all_sources()
         conn = init_db()
 
         try:
             series_count = upsert_kr_leverage_daily(conn, combined_df)
             if not etf_df.empty:
                 etf_count = upsert_kr_leverage_etf(conn, etf_df)
-                etf_kpi = _compute_etf_kpi(etf_df)
             else:
                 etf_count = 0
-                etf_kpi = {}
-            meta_row = upsert_kr_leverage_meta(conn, meta_raw, etf_kpi)
+            meta_row = upsert_kr_leverage_meta(conn, meta_raw, etf_kpi or {})
 
             elapsed = round(time.monotonic() - t0, 1)
             return {
