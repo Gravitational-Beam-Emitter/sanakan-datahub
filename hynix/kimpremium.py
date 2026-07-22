@@ -356,6 +356,61 @@ def build_combined_df(
 # ═══════════════════════════════════════════════════════════════
 
 
+def _compute_kpi(df: pd.DataFrame) -> Dict[str, Any]:
+    """Compute KPI snapshot from the latest daily data and historical percentiles.
+
+    Returns a dict of KPI values expected by the kr-leverage frontend.
+    """
+    if df.empty:
+        return {}
+
+    latest = df.iloc[-1]
+    # Use last 10 years for percentile ranking (~2500 trading days)
+    window = max(1, min(len(df), 2500))
+    recent = df.tail(window)
+
+    def pct_rank(series, val):
+        """Percentile rank of val within series (0-100, higher = rarer)."""
+        clean = series.dropna()
+        if len(clean) < 2 or val is None:
+            return None
+        return round((clean < val).sum() / len(clean) * 100, 1)
+
+    # r2 and its percentile
+    r2_val = float(latest["r2"]) if pd.notna(latest.get("r2")) else None
+    r2_pct = pct_rank(recent["r2"], r2_val) if r2_val is not None else None
+
+    # mg = MarketCap/GDP × 100 (Buffett indicator)
+    mg_val = float(latest["mg"]) if "mg" in df.columns and pd.notna(latest.get("mg")) else None
+    mg_pct = pct_rank(recent["mg"], mg_val) if mg_val is not None and "mg" in df.columns else None
+
+    # liq5d = 5-day average of misu (liquidation amount in KRW 100M)
+    misu_series = df["misu"]
+    liq5d_val = float(misu_series.tail(5).mean()) if len(misu_series) >= 5 and pd.notna(misu_series.tail(5)).all() else None
+    liq_pct = pct_rank(recent["misu"], liq5d_val) if liq5d_val is not None else None
+
+    # util = credit utilization rate (requires broker capital data)
+    util_val = float(latest["util"]) if "util" in df.columns and pd.notna(latest.get("util")) else None
+    cap_eq_val = None  # broker's own capital — not available from KOFIA directly
+
+    return {
+        "r2": round(r2_val, 2) if r2_val is not None else None,
+        "r2Pct": r2_pct,
+        "mg": round(mg_val, 1) if mg_val is not None else None,
+        "mgPct": mg_pct,
+        "liq5d": round(liq5d_val, 1) if liq5d_val is not None else None,
+        "liqPct": liq_pct,
+        "fin": float(latest["fin"]) if pd.notna(latest.get("fin")) else None,
+        "finKospi": float(latest["finKospi"]) if pd.notna(latest.get("finKospi")) else None,
+        "finKosdaq": float(latest["finKosdaq"]) if pd.notna(latest.get("finKosdaq")) else None,
+        "dep": float(latest["dep"]) if pd.notna(latest.get("dep")) else None,
+        "kospi": float(latest["kospi"]) if pd.notna(latest.get("kospi")) else None,
+        "spx": float(latest["spx"]) if pd.notna(latest.get("spx")) else None,
+        "util": round(util_val, 1) if util_val is not None else None,
+        "capEq": cap_eq_val,
+    }
+
+
 def fetch_all_sources(
     credit_start: str = "19980101",
     credit_end: Optional[str] = None,
@@ -394,11 +449,25 @@ def fetch_all_sources(
     # 6. ETF data placeholder (KOFIA doesn't provide ETF flow data directly)
     etf_df = pd.DataFrame()
 
+    # 7. Compute KPI from the combined data
+    kpi = _compute_kpi(combined)
+
+    meta_raw = {
+        "generated": datetime.now().isoformat(),
+        "asof": str(combined["date"].iloc[-1])[:10] if not combined.empty else "",
+        "range": {
+            "start": str(combined["date"].iloc[0])[:10] if not combined.empty else "",
+            "end": str(combined["date"].iloc[-1])[:10] if not combined.empty else "",
+            "rows": len(combined),
+        },
+        "kpi": kpi,
+    }
+
     elapsed = round(time.monotonic() - t0, 1)
     logger.info("fetch_all_sources complete in %.1fs: combined=%d rows",
                 elapsed, len(combined))
 
-    return combined, latest_meta, etf_df
+    return combined, meta_raw, etf_df
 
 
 def fetch_and_store() -> Dict[str, Any]:
