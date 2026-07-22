@@ -44,6 +44,8 @@ python3 -m pip install fastapi uvicorn duckdb pandas requests finance-datareader
 | 市场资金（dep, derivDep, rp, misu） | KOFIA Freesis API | 直接 HTTP POST 请求 |
 | KOSPI/KOSDAQ 指数 + 市值 | FinanceDataReader → KRX | Python 库 |
 | S&P 500 指数 | FinanceDataReader | Python 库 |
+| 韩国名义GDP（mg 指标） | World Bank API | 免费公开 API，无需认证 |
+| 券商自有资本合计（util 指标） | FSS 季度报告 | 硬编码年度数据点 + 日度插值 |
 
 不再依赖 kimpremium.com 的聚合 JSON 文件，所有数据从原始数据源直接获取。
 
@@ -221,8 +223,39 @@ cd "/Users/a80460/Desktop/Sanakan datahub" && python3 -m hynix.kimpremium
 | KOSPI 指数 + 市值 | KRX → FinanceDataReader | `fdr.DataReader('KS11', ...)` |
 | KOSDAQ 指数 + 市值 | KRX → FinanceDataReader | `fdr.DataReader('KQ11', ...)` |
 | S&P 500 指数 | FinanceDataReader | `fdr.DataReader('US500', ...)` |
+| 韩国名义GDP（mg指标） | World Bank API | `GET /v2/country/KR/indicator/NY.GDP.MKTP.CN` (免费，无需认证) |
+| 券商自有资本合计（util指标） | FSS 季度报告 | 硬编码数据点 + 日度前向填充 (2025年末: 106.9T) |
 
 **不依赖 yfinance** — FinanceDataReader 直接访问 KRX 和 Yahoo 历史数据镜像，不会被 Yahoo 封 IP。
+
+### 新增衍生指标（v2.1）
+
+以下指标由 `build_combined_df()` 自动计算，无需额外数据源：
+
+| 指标 | 计算方式 |
+|------|------|
+| `mg` | KOSPI 总市值 / 韩国名义GDP × 100（Buffett Indicator），GDP 由年频插值为日频 |
+| `util` | (融资 + 大主 + 质押贷款) / 券商自有资本 × 100 |
+| `p10` | r2 在近 2500 个交易日（~10年）中的百分位排名 |
+| `r1p` | KOSPI 融资 / KOSPI 市值 × 100 |
+| `r1q` | KOSDAQ 融资 / KOSDAQ 市值 × 100 |
+| `col` | 预托证券担保融资（来自 KOFIA TMPV9） |
+| `loan` | 信用交易大主合计 = loanKospi + loanKosdaq |
+
+### ETF 数据
+
+ETF 数据（thermo, flow, cumFlow 等）目前有两个来源：
+
+1. **历史数据（2024-07 至 2026-07-16）**：来自原 kimpremium.com 的 620 条日频记录，基于真实杠杆 ETF 申赎数据
+2. **代理指标（v2.1 新增）**：`_compute_etf_df()` 函数从日频信用/KOSPI 数据计算代理 ETF 温度指标（滚动 R² 相关系数），用于填补 2026-07-16 之后的数据
+
+### 仍缺失的数据
+
+| 指标 | 说明 | 原因 |
+|------|------|------|
+| 真实 ETF 申赎数据 | KOFIA 不提供 ETF 资金流 API（STATFND 系列返回空） | 需要 KRX ETF 市场数据或商业数据源 |
+| 强平金额（真实） | KOFIA 提供 `forceLiqAmt`/`forceLiqPct`（반대매매）但未写入 DB | 列名与现有 schema 不兼容，需前端同步修改 |
+| 券商个体数据 | 每间券商的自有资本、信用额度使用情况 | 需要 FSS 或 KOFIA 券商级别的数据 |
 
 数据库文件：`/Users/a80460/Desktop/Sanakan datahub/hynix/hynix.duckdb`
 
@@ -231,11 +264,20 @@ cd "/Users/a80460/Desktop/Sanakan datahub" && python3 -m hynix.kimpremium
 | indicator | 中文名称 | 说明 |
 |------|------|------|
 | `creb` | 信用贷款余额 | 韩国散户借钱买股票的总余额 |
-| `fin` | 融资余额 | 信用融资余额 |
-| `dep` | 存款余额 | 客户存款总额 |
+| `fin` | 融资余额 | 信用融资余额（신용거래융자） |
+| `dep` | 存款余额 | 客户存款总额（투자자예탁금） |
 | `liq` | 资金流动性 | 信用余额 / 存款余额 |
 | `r2` | 信用率 | 信用余额 / KOSPI 市值 |
-| `mg` | 维持保证金 | 维持担保比例 |
+| `r1` | 信用/存管金 | 信用余额 / (存管金 + 衍生品保证金) |
+| `r1p` | KOSPI 信用率 | KOSPI 融资 / KOSPI 市值 |
+| `r1q` | KOSDAQ 信用率 | KOSDAQ 融资 / KOSDAQ 市值 |
+| `p10` | 10年分位 | r2 在近 10 年（~2500 交易日）中的百分位 |
+| `mg` | KOSPI市值/GDP | 巴菲特指标（Buffett Indicator），GDP 来自 World Bank API |
+| `util` | 额度利用率 | 总信用供与 / 券商自有资本合计（法定上限 100%） |
+| `mcap` | KOSPI 总市值 | 来自 FinanceDataReader (KRX) |
+| `col` | 质押贷款 | 预托证券担保融资（예탁증권담보융자） |
+| `loan` | 融券余额 | 信用交易大主（대주）合计 |
+| `misu` | 委托未收金 | 委托买卖未收金（위탁매매미수금） |
 | `deltapct` | 信用变化率 | 日度信用余额变化百分比 |
 | `exhaust` | 信用枯竭度 | 信用使用率指标 |
 | `bkprc` | 爆仓量 | 强制平仓量 |
@@ -243,6 +285,6 @@ cd "/Users/a80460/Desktop/Sanakan datahub" && python3 -m hynix.kimpremium
 | `sentiment` | 散户情绪 | 综合情绪指标 |
 | `trend` | 信用趋势 | 信用趋势方向 |
 | `short` | 融券余额 | 做空余额 |
-| `thermo` | ETF资金温度 | 杠杆ETF资金流入热度 |
+| `thermo` | ETF资金温度 | 杠杆ETF资金流入热度（来自 kimpremium.com 历史数据） |
 | `flow` | ETF资金流量 | 杠杆ETF日度资金流 |
 | `cumFlow` | ETF累计流量 | 杠杆ETF累计资金流 |
