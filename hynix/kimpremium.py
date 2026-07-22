@@ -413,12 +413,19 @@ def build_combined_df(
     else:
         df["r2"] = None
 
-    # liq = credit balance / deposits ratio
-    if "fin" in df.columns and "dep" in df.columns:
+    # liq = forced liquidation amount (반대매매금액, KRW 100M)
+    # liqR = forced liquidation ratio (반대매매비중, % of unsettled accounts)
+    if "forceLiqAmt" in df.columns and df["forceLiqAmt"].notna().any():
+        df["liq"] = df["forceLiqAmt"]
+    elif "fin" in df.columns and "dep" in df.columns:
         df["liq"] = df["fin"] / df["dep"].replace(0, None)
-        df["liqR"] = df["dep"] / df["fin"].replace(0, None)
     else:
         df["liq"] = None
+    if "forceLiqPct" in df.columns and df["forceLiqPct"].notna().any():
+        df["liqR"] = df["forceLiqPct"]
+    elif "fin" in df.columns and "dep" in df.columns:
+        df["liqR"] = df["dep"] / df["fin"].replace(0, None)
+    else:
         df["liqR"] = None
 
     # r1 = fin / (dep + derivDep) — credit / total investor deposits
