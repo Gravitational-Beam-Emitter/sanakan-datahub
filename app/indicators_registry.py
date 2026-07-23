@@ -1430,7 +1430,7 @@ def _generate_aml_indicators():
     ]
     for c in _fatf_grey:
         entries.append({
-            "source": "aml", "name": f"FATF Grey List — {c}",
+            "source": "aml", "name": f"AML·FATF Grey List — {c}",
             "method": "fatf_country_status",
             "params": {"country": c, "list_type": "grey"},
             "description": f"FATF灰名单（加强监控司法管辖区）·{c}·Wikipedia FATF黑名单页面·每次FATF全会后更新",
@@ -1442,7 +1442,7 @@ def _generate_aml_indicators():
     _fatf_black = ["Iran", "North Korea", "Myanmar"]
     for c in _fatf_black:
         entries.append({
-            "source": "aml", "name": f"FATF Black List — {c}",
+            "source": "aml", "name": f"AML·FATF Black List — {c}",
             "method": "fatf_country_status",
             "params": {"country": c, "list_type": "black"},
             "description": f"FATF黑名单（呼吁采取行动的高风险司法管辖区）·{c}·Wikipedia FATF黑名单页面·每次FATF全会后更新",
@@ -1452,14 +1452,14 @@ def _generate_aml_indicators():
 
     # FATF aggregates
     entries.append({
-        "source": "aml", "name": "FATF Grey List Count",
+        "source": "aml", "name": "AML·FATF Grey List Count",
         "method": "fatf_grey_list_count", "params": {},
         "description": "FATF灰名单（加强监控）国家数量·Wikipedia FATF黑名单页面·每次FATF全会后更新",
         "frequency": "event",
         "tags": "AML风险,金融合规,FATF",
     })
     entries.append({
-        "source": "aml", "name": "FATF Black List Count",
+        "source": "aml", "name": "AML·FATF Black List Count",
         "method": "fatf_black_list_count", "params": {},
         "description": "FATF黑名单（呼吁采取行动）国家数量·Wikipedia FATF黑名单页面·每次FATF全会后更新",
         "frequency": "event",
@@ -1489,7 +1489,7 @@ def _generate_aml_indicators():
     ]
     for c in _incsr:
         entries.append({
-            "source": "aml", "name": f"INCSR Major ML Country — {c}",
+            "source": "aml", "name": f"AML·INCSR Major ML Country — {c}",
             "method": "incsr_country_status",
             "params": {"country": c},
             "description": f"美国国务院INCSR Vol.II主要洗钱关注国·{c}·年度更新·每年3月发布",
@@ -1499,7 +1499,7 @@ def _generate_aml_indicators():
 
     # INCSR aggregate
     entries.append({
-        "source": "aml", "name": "INCSR Major ML Countries Count",
+        "source": "aml", "name": "AML·INCSR Major ML Countries Count",
         "method": "incsr_listed_count", "params": {},
         "description": "美国国务院INCSR Vol.II列为洗钱主要关注国的司法管辖区数量·年度更新·每年3月发布",
         "frequency": "annual",
@@ -1538,7 +1538,7 @@ def _generate_aml_indicators():
             continue
         seen.add(c)
         entries.append({
-            "source": "aml", "name": f"Basel AML Index — {c}",
+            "source": "aml", "name": f"AML·Basel AML Index — {c}",
             "method": "basel_country_score",
             "params": {"country": c},
             "description": f"巴塞尔AML指数·{c}·综合评分0-10·177国排名·年度更新·每年12月发布",
@@ -1548,14 +1548,14 @@ def _generate_aml_indicators():
 
     # Basel aggregates
     entries.append({
-        "source": "aml", "name": "Basel AML Index Top 10 Risks",
+        "source": "aml", "name": "AML·Basel AML Index Top 10 Risks",
         "method": "basel_top_risks", "params": {"n": 10},
         "description": "巴塞尔AML指数风险最高的10个国家·年度更新",
         "frequency": "annual",
         "tags": "AML风险,金融合规,Basel",
     })
     entries.append({
-        "source": "aml", "name": "Basel AML Index Bottom 10 Risks",
+        "source": "aml", "name": "AML·Basel AML Index Bottom 10 Risks",
         "method": "basel_lowest_risks", "params": {"n": 10},
         "description": "巴塞尔AML指数风险最低的10个国家·年度更新",
         "frequency": "annual",
@@ -1605,7 +1605,7 @@ def _generate_sanctions_indicators():
     ]
     for c in _ofac_countries:
         entries.append({
-            "source": "sanctions", "name": f"OFAC Sanctions — {c}",
+            "source": "sanctions", "name": f"AML·OFAC Sanctions — {c}",
             "method": "ofac_country_sanctions",
             "params": {"country": c},
             "description": f"OFAC SDN制裁·{c}·按国家聚合被制裁实体/个人/船舶/飞行器数量·每日更新·美国财政部OFAC",
@@ -1615,7 +1615,7 @@ def _generate_sanctions_indicators():
 
     # OFAC total counts
     entries.append({
-        "source": "sanctions", "name": "OFAC SDN Total Sanctions",
+        "source": "sanctions", "name": "AML·OFAC SDN Total Sanctions",
         "method": "ofac_total_counts", "params": {},
         "description": "OFAC SDN制裁总计·实体+个人+船舶+飞行器总数量及制裁计划数·每日更新·美国财政部OFAC",
         "frequency": "daily",
@@ -1624,7 +1624,7 @@ def _generate_sanctions_indicators():
 
     # OFAC sanctions by country (all countries aggregate)
     entries.append({
-        "source": "sanctions", "name": "OFAC Sanctions by Country",
+        "source": "sanctions", "name": "AML·OFAC Sanctions by Country",
         "method": "ofac_sanctions_by_country", "params": {},
         "description": "OFAC SDN制裁按国家聚合·所有国家被制裁实体/个人/船舶/飞行器分布·每日更新·美国财政部OFAC",
         "frequency": "daily",
@@ -1662,7 +1662,7 @@ def _generate_sanctions_indicators():
     ]
     for c in _cpi_countries:
         entries.append({
-            "source": "sanctions", "name": f"TI CPI Score — {c}",
+            "source": "sanctions", "name": f"AML·TI CPI Score — {c}",
             "method": "cpi_country_score",
             "params": {"country": c},
             "description": f"透明国际腐败感知指数·{c}·0-100评分·180国排名·年度更新·Transparency International CPI",
@@ -1672,14 +1672,14 @@ def _generate_sanctions_indicators():
 
     # CPI aggregates
     entries.append({
-        "source": "sanctions", "name": "TI CPI Top 10 Most Corrupt",
+        "source": "sanctions", "name": "AML·TI CPI Top 10 Most Corrupt",
         "method": "cpi_top_risks", "params": {"n": 10},
         "description": "透明国际腐败感知指数·最腐败10国·0-100最低分·年度更新·Transparency International CPI",
         "frequency": "annual",
         "tags": "AML风险,金融合规,腐败,CPI",
     })
     entries.append({
-        "source": "sanctions", "name": "TI CPI Top 10 Least Corrupt",
+        "source": "sanctions", "name": "AML·TI CPI Top 10 Least Corrupt",
         "method": "cpi_cleanest", "params": {"n": 10},
         "description": "透明国际腐败感知指数·最清廉10国·0-100最高分·年度更新·Transparency International CPI",
         "frequency": "annual",
@@ -1731,7 +1731,7 @@ def _generate_eu_sanctions_indicators():
     ]
     for c in _eu_countries:
         entries.append({
-            "source": "sanctions", "name": f"EU Sanctions — {c}",
+            "source": "sanctions", "name": f"AML·EU Sanctions — {c}",
             "method": "eu_country_sanctions",
             "params": {"country": c},
             "description": f"EU欧盟金融制裁·{c}·按国家聚合被制裁实体/个人数量·每日更新·EU FSF",
@@ -1741,7 +1741,7 @@ def _generate_eu_sanctions_indicators():
 
     # EU total counts
     entries.append({
-        "source": "sanctions", "name": "EU FSF Total Sanctions",
+        "source": "sanctions", "name": "AML·EU FSF Total Sanctions",
         "method": "eu_total_counts", "params": {},
         "description": "EU欧盟金融制裁总计·实体+个人总数量·每日更新·EU FSF Consolidated List",
         "frequency": "daily",
@@ -1750,7 +1750,7 @@ def _generate_eu_sanctions_indicators():
 
     # EU sanctions by country (all countries aggregate)
     entries.append({
-        "source": "sanctions", "name": "EU Sanctions by Country",
+        "source": "sanctions", "name": "AML·EU Sanctions by Country",
         "method": "eu_sanctions_by_country", "params": {},
         "description": "EU欧盟金融制裁按国家聚合·所有国家被制裁实体/个人分布·每日更新·EU FSF",
         "frequency": "daily",
@@ -1798,7 +1798,7 @@ def _generate_un_sanctions_indicators():
     ]
     for c in _un_countries:
         entries.append({
-            "source": "sanctions", "name": f"UN Sanctions — {c}",
+            "source": "sanctions", "name": f"AML·UN Sanctions — {c}",
             "method": "un_country_sanctions",
             "params": {"country": c},
             "description": f"UN联合国安理会制裁·{c}·按国家聚合被制裁个人/实体数量·每日更新·UN SC Consolidated List",
@@ -1808,7 +1808,7 @@ def _generate_un_sanctions_indicators():
 
     # UN total counts
     entries.append({
-        "source": "sanctions", "name": "UN SC Total Sanctions",
+        "source": "sanctions", "name": "AML·UN SC Total Sanctions",
         "method": "un_total_counts", "params": {},
         "description": "UN联合国安理会制裁总计·个人+实体总数量+制裁制度数·每日更新·UN SC Consolidated List",
         "frequency": "daily",
@@ -1817,7 +1817,7 @@ def _generate_un_sanctions_indicators():
 
     # UN sanctions by country (all countries aggregate)
     entries.append({
-        "source": "sanctions", "name": "UN Sanctions by Country",
+        "source": "sanctions", "name": "AML·UN Sanctions by Country",
         "method": "un_sanctions_by_country", "params": {},
         "description": "UN联合国安理会制裁按国家聚合·所有国家被制裁个人/实体分布·每日更新·UN SC Consolidated List",
         "frequency": "daily",
