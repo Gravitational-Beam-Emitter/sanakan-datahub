@@ -157,6 +157,37 @@ KOL_INACTIVE_DAYS_REMOVE = 90   # days of no posting to remove
 THERMOMETER_LOOKBACK_DAYS = 7   # lookback window for heat calculation
 THERMOMETER_RECENCY_HALF_LIFE = 48  # hours for recency decay half-life
 
+# ── WeChat Official Accounts (微信公众号) ──────────────────────
+# Pre-defined top financial KOLs from 每日经济新闻 2025 金融自媒体榜
+# and industry-known accounts with 100K+ reads per article.
+# Scraped via Sogou WeChat Search (weixin.sogou.com) — no login needed.
+WECHAT_KOLS = [
+    # Tier 1 — Verified Top KOLs (百万粉丝 + 10万+阅读)
+    {"name": "投资明见", "account": "tzmingjian", "focus": "技术分析"},
+    {"name": "猫笔刀", "account": "maobidao", "focus": "市场评论"},
+    {"name": "发牌手杰克", "account": "fapaishoujieke", "focus": "短线策略"},
+    {"name": "越女事务所", "account": "yuenvshiwusuo", "focus": "综合理财"},
+    {"name": "13个精算师", "account": "shisansuanshi", "focus": "保险/精算"},
+    {"name": "金融人事mini", "account": "jrrsmini", "focus": "金融机构人事"},
+    {"name": "叶檀财经", "account": "yetancaijing", "focus": "财经评论"},
+    {"name": "饭统戴老板", "account": "fantongdailaoban", "focus": "经济/产业分析"},
+    # Tier 2 — Well-Known (专业榜常客)
+    {"name": "金融八卦女频道", "account": "jinrongbaguanv", "focus": "金融八卦"},
+    {"name": "刘备教授", "account": "liubeijiaoshou", "focus": "市场心理/趋势"},
+    {"name": "搬砖小组", "account": "banzhuanxiaozu", "focus": "信息汇总+投顾"},
+    {"name": "老钱日日谈", "account": "laoqianritan", "focus": "宏观数据总结"},
+    {"name": "价投谷子地", "account": "jiatouguzidi", "focus": "银行股价值投资"},
+    {"name": "陈小群周策略", "account": "chenxiaoqunzhou", "focus": "国际财经解读"},
+    {"name": "城商行研究", "account": "chengshanghang", "focus": "城商行分析"},
+    {"name": "跨境金融监管研究", "account": "kuajingjinrong", "focus": "跨境合规"},
+    {"name": "独角金融", "account": "dujiaojinrong", "focus": "消费金融"},
+    {"name": "问就是加多", "account": "wenjiushijiaduo", "focus": "市场策略/加仓"},
+    {"name": "爱打新的猫", "account": "aidaxindemao", "focus": "新股/打新"},
+    {"name": "深圳A先生", "account": "shenzhenaxiansheng", "focus": "A股市场分析"},
+]
+WECHAT_ARTICLES_PER_KOL = 10
+WECHAT_RATE_LIMIT = 5.0  # seconds between accounts
+
 # ── Platform multipliers ─────────────────────────────────────
 PLATFORM_MULTIPLIERS = {
     "reddit": 0.8,
@@ -167,6 +198,7 @@ PLATFORM_MULTIPLIERS = {
     "weibo": 0.9,
     "seekingalpha": 0.7,
     "moomoo": 0.75,
+    "wechat": 1.0,
 }
 
 # ── Tier base weights ────────────────────────────────────────

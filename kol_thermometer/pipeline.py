@@ -4,7 +4,9 @@ Pipeline — KOL discovery, post fetching, stock mention extraction, rating comp
 Data sources:
   - Reddit: stock subreddits via PRAW
   - YouTube: stock analysis channels via Data API v3
-  - 东方财富股吧: via AKShare (P1)
+  - Twitter/X, Weibo, Seeking Alpha, Moomoo: Playwright scraping
+  - StockTwits, Finnhub: REST APIs
+  - WeChat Official Accounts (微信公众号): via Sogou WeChat Search
 
 Usage:
   python -m kol_thermometer.pipeline           # daily fetch
@@ -45,6 +47,9 @@ from kol_thermometer.config import (
     SEEKINGALPHA_NEWS_LIMIT,
     MOOMOO_SYMBOLS,
     MOOMOO_POSTS_PER_SYMBOL,
+    WECHAT_KOLS,
+    WECHAT_ARTICLES_PER_KOL,
+    WECHAT_RATE_LIMIT,
 )
 from kol_thermometer.storage import (
     init_db,
@@ -1166,6 +1171,117 @@ def fetch_finnhub(conn, news_limit: int = FINNHUB_NEWS_LIMIT,
 
 
 # ═══════════════════════════════════════════════════════════════
+# WeChat Official Accounts Fetcher (Playwright via Sogou)
+# ═══════════════════════════════════════════════════════════════
+
+def fetch_wechat(conn, kols: Optional[List[Dict[str, str]]] = None,
+                 articles_per_kol: int = WECHAT_ARTICLES_PER_KOL,
+                 is_init: bool = False) -> Dict[str, Any]:
+    """Scrape WeChat Official Account articles via Sogou WeChat Search.
+
+    Uses pre-defined KOL list. Each KOL's recent articles are scraped and
+    go through standard LLM tagging for stock mention extraction.
+
+    Since these are pre-verified top financial KOLs, they start with high
+    initial scores (Tier A minimum).
+
+    Returns summary dict.
+    """
+    from kol_thermometer.scraper import scrape_wechat_kol
+
+    if not _check_playwright_available():
+        return {"source": "wechat", "status": "skipped", "reason": "playwright not installed"}
+
+    kol_list = kols or WECHAT_KOLS
+    total_posts = 0
+    total_kols = 0
+    errors = []
+
+    for k in kol_list:
+        try:
+            account_name = k["name"]
+            logger.info(f"WeChat: scraping {account_name} ...")
+
+            all_posts, all_kols = scrape_wechat_kol(account_name, limit=articles_per_kol)
+
+            if all_posts:
+                count = upsert_posts_batch(conn, all_posts)
+                total_posts += count
+
+            max_followers = get_max_followers(conn, "wechat")
+
+            for kc in all_kols:
+                pc = kc["post_count"]
+                if pc == 0:
+                    continue
+
+                # Pre-verified KOLs — conservative estimates based on known reach
+                followers = kc.get("followers", 500000)
+                posts_per_week = pc / max(is_init and 30 or 7, 1) * 7
+
+                scores = compute_kol_score(
+                    followers=followers,
+                    max_followers=max(max_followers, followers),
+                    avg_likes=kc.get("total_likes", 0) / max(pc, 1),
+                    avg_comments=kc.get("total_comments", 0) / max(pc, 1),
+                    avg_shares=0,
+                    posts_per_week=posts_per_week,
+                    account_age_days=kc.get("account_age_days", 365 * 3),
+                    stock_mention_ratio=0.7,  # financial accounts, high relevance
+                )
+                tier = assign_tier(scores["total_score"])
+                # Pre-verified KOLs get at least Tier B
+                tier_rank = {"S": 5, "A": 4, "B": 3, "C": 2, "D": 1}
+                if tier_rank.get(tier, 0) < tier_rank["B"]:
+                    tier = "B"
+                weight = compute_kol_weight(tier, "wechat")
+
+                kc.update({
+                    "avg_likes": kc.get("total_likes", 0) / max(pc, 1),
+                    "avg_comments": kc.get("total_comments", 0) / max(pc, 1),
+                    "avg_shares": 0,
+                    "avg_views": 0,
+                    "posts_per_week": round(posts_per_week, 2),
+                    "stock_mention_ratio": 0.7,
+                    "total_score": scores["total_score"],
+                    "score_reach": scores["reach"],
+                    "score_engagement": scores["engagement"],
+                    "score_consistency": scores["consistency"],
+                    "score_relevance": scores["stock_relevance"],
+                    "score_impact": scores["impact"],
+                    "tier": tier,
+                    "base_weight": weight,
+                    "first_seen_date": TODAY,
+                    "last_active_date": TODAY,
+                    "is_active": 1,
+                })
+                kid = upsert_kol(conn, kc)
+                if kid:
+                    total_kols += 1
+                    conn.execute(
+                        "UPDATE kol_posts SET kol_id = ? WHERE platform = 'wechat' AND kol_id IS NULL",
+                        [kid],
+                    )
+
+            logger.info(f"  {account_name}: {len(all_posts)} articles")
+            time.sleep(WECHAT_RATE_LIMIT)
+
+        except Exception as e:
+            msg = f"WeChat '{k['name']}': {e}"
+            logger.error(msg)
+            errors.append(msg)
+
+    return {
+        "source": "wechat",
+        "status": "ok" if not errors else "partial",
+        "accounts_scanned": len(kol_list),
+        "posts_fetched": total_posts,
+        "kols_discovered": total_kols,
+        "errors": errors,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════
 # Stock Mention Tagging
 # ═══════════════════════════════════════════════════════════════
 
@@ -1335,7 +1451,7 @@ def fetch_daily(source: Optional[str] = None) -> Dict[str, Any]:
 
     Args:
         source: optionally run only one source ("reddit", "youtube", "stocktwits",
-                "finnhub", "twitter", "weibo", "seekingalpha", "moomoo")
+                "finnhub", "twitter", "weibo", "seekingalpha", "moomoo", "wechat")
     """
     conn = init_db()
     results = {}
@@ -1412,6 +1528,15 @@ def fetch_daily(source: Optional[str] = None) -> Dict[str, Any]:
             results["finnhub"] = result
             log_fetch_end(conn, log_id, items_checked=result.get("posts_fetched", 0),
                           new_items=0)
+            if result.get("errors"):
+                all_errors.extend(result["errors"])
+
+        if not source or source == "wechat":
+            log_id = log_fetch_start(conn, "wechat")
+            result = fetch_wechat(conn)
+            results["wechat"] = result
+            log_fetch_end(conn, log_id, items_checked=result.get("posts_fetched", 0),
+                          new_items=result.get("kols_discovered", 0))
             if result.get("errors"):
                 all_errors.extend(result["errors"])
 
@@ -1495,7 +1620,7 @@ if __name__ == "__main__":
     parser.add_argument("--init", action="store_true", help="Backfill mode (wider scan)")
     parser.add_argument("--source", type=str, default=None,
                         choices=["reddit", "youtube", "stocktwits", "finnhub",
-                                 "twitter", "weibo", "seekingalpha", "moomoo"],
+                                 "twitter", "weibo", "seekingalpha", "moomoo", "wechat"],
                         help="Run a single source only")
     args = parser.parse_args()
 

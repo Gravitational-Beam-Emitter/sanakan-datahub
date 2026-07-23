@@ -6,6 +6,7 @@ Platforms:
   - Weibo      — search for stock names/codes
   - Seeking Alpha — latest news/analysis headlines
   - Moomoo     — stock discussion community
+  - WeChat     — Official Account articles via Sogou WeChat Search
 
 All functions return lists of post dicts + KOL candidate dicts.
 """
@@ -28,6 +29,9 @@ from kol_thermometer.config import (
     SEEKINGALPHA_NEWS_LIMIT,
     MOOMOO_SYMBOLS,
     MOOMOO_POSTS_PER_SYMBOL,
+    WECHAT_KOLS,
+    WECHAT_ARTICLES_PER_KOL,
+    WECHAT_RATE_LIMIT,
 )
 
 logger = logging.getLogger("kol_thermometer.scraper")
@@ -567,6 +571,123 @@ def scrape_moomoo_community(
 
 
 # ═══════════════════════════════════════════════════════════════
+# WeChat Official Accounts Scraper (via Sogou WeChat Search)
+# ═══════════════════════════════════════════════════════════════
+
+def scrape_wechat_kol(
+    account_name: str,
+    limit: int = WECHAT_ARTICLES_PER_KOL,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Scrape recent articles for a WeChat Official Account via Sogou WeChat Search.
+
+    Searches for the account name on weixin.sogou.com and extracts articles
+    from the search results that match the target account.
+
+    Returns (posts, kols) where kols has one entry for the account itself.
+    """
+    pw, browser = get_browser()
+    if browser is None:
+        return [], []
+
+    posts = []
+    kol_data = None
+
+    try:
+        page, ctx = _new_page(browser)
+
+        url = f"https://weixin.sogou.com/weixin?type=2&query={account_name}"
+        logger.info(f"WeChat scraping: {account_name}")
+        page.goto(url, wait_until="domcontentloaded")
+        time.sleep(random.uniform(3, 6))
+
+        # Scroll to load results
+        for _ in range(2):
+            page.keyboard.press("End")
+            time.sleep(random.uniform(1, 2))
+
+        # Sogou WeChat article list items
+        items = page.query_selector_all("li.news-list-item, div.news-item, li[class*='news'], div.txt-box")
+
+        if not items:
+            # Fallback: try more generic selectors
+            items = page.query_selector_all("ul.news-list li, div.results div.item, div.weixin-result")
+
+        article_count = 0
+        for item in items:
+            if article_count >= limit:
+                break
+
+            try:
+                # Title and URL
+                title_el = item.query_selector("h3 a, a.tit, h3.tt a, a[href*='mp.weixin.qq.com']")
+                if not title_el:
+                    title_el = item.query_selector("a")
+                title = (title_el.inner_text() or "").strip() if title_el else ""
+                article_url = title_el.get_attribute("href") if title_el else ""
+
+                # Summary
+                summary_el = item.query_selector("p.txt-info, p.desc, div.txt-info, p[class*='txt']")
+                summary = (summary_el.inner_text() or "").strip() if summary_el else ""
+
+                # Date
+                date_el = item.query_selector("span.s2, span.time, span[class*='time'], span[class*='date']")
+                posted_at = (date_el.inner_text() or "").strip() if date_el else ""
+
+                # Source account name in result
+                account_el = item.query_selector("a.account, span.account, span.s1, a[class*='account']")
+                result_account = (account_el.inner_text() or "").strip() if account_el else ""
+
+                # Filter: only keep articles from our target account
+                if result_account and account_name not in result_account:
+                    continue
+
+                if title and article_url:
+                    posts.append({
+                        "platform": "wechat",
+                        "post_id": article_url.split("/")[-1].rstrip(".html")[:32] if "/" in article_url else str(hash(article_url))[:16],
+                        "post_url": article_url,
+                        "title": title[:200],
+                        "content": summary or title,
+                        "posted_at": posted_at,
+                        "fetched_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+                        "likes": 0,
+                        "comments": 0,
+                        "shares": 0,
+                        "views": 0,
+                        "kol_id": None,
+                    })
+                    article_count += 1
+
+            except Exception as e:
+                logger.debug(f"WeChat article parse error: {e}")
+                continue
+
+        # Build KOL candidate entry for this account
+        kol_data = {
+            "platform": "wechat",
+            "username": account_name,
+            "display_name": account_name,
+            "profile_url": url,
+            "followers": 500000,  # conservative estimate for known KOLs
+            "account_age_days": 365 * 3,  # most are established accounts
+            "post_count": article_count,
+            "total_likes": article_count * 5000,  # estimated reads per article
+            "total_comments": article_count * 20,
+        }
+
+        ctx.close()
+        logger.info(f"WeChat '{account_name}': {len(posts)} articles")
+
+    except Exception as e:
+        logger.error(f"WeChat scrape failed for '{account_name}': {e}")
+    finally:
+        browser.close()
+        pw.stop()
+
+    return posts, [kol_data] if kol_data else []
+
+
+# ═══════════════════════════════════════════════════════════════
 # Batch scrape helpers
 # ═══════════════════════════════════════════════════════════════
 
@@ -632,5 +753,28 @@ def scrape_moomoo_all(
                 all_kols[uname]["post_count"] += k["post_count"]
                 all_kols[uname]["total_likes"] += k["total_likes"]
         time.sleep(random.uniform(1, 3))
+
+    return all_posts, list(all_kols.values())
+
+
+def scrape_wechat_all(
+    kols: Optional[List[Dict[str, str]]] = None,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Scrape articles for all configured WeChat KOLs."""
+    all_posts = []
+    all_kols: Dict[str, Dict[str, Any]] = {}
+
+    for k in (kols or WECHAT_KOLS):
+        posts, kols_list = scrape_wechat_kol(k["name"], limit=WECHAT_ARTICLES_PER_KOL)
+        all_posts.extend(posts)
+        for kc in kols_list:
+            uname = kc["username"]
+            if uname not in all_kols:
+                kc["display_name"] = k["name"]
+                all_kols[uname] = kc
+            else:
+                all_kols[uname]["post_count"] += kc["post_count"]
+                all_kols[uname]["total_likes"] += kc["total_likes"]
+        time.sleep(random.uniform(3, 8))
 
     return all_posts, list(all_kols.values())

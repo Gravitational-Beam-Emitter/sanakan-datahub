@@ -230,7 +230,7 @@ export default function ThermometerContent({
               className="flex items-center gap-3 p-3 rounded-lg bg-surface hover:ring-1 hover:ring-border transition-all"
             >
               <span className="text-sm text-muted w-8">
-                {k.platform === "reddit" ? "🤖" : k.platform === "youtube" ? "▶️" : k.platform === "twitter" ? "🐦" : k.platform === "weibo" ? "📢" : k.platform === "seekingalpha" ? "📈" : k.platform === "moomoo" ? "🐮" : k.platform === "stocktwits" ? "🐂" : k.platform === "finnhub" ? "📰" : "📊"}
+                {k.platform === "reddit" ? "🤖" : k.platform === "youtube" ? "▶️" : k.platform === "twitter" ? "🐦" : k.platform === "weibo" ? "📢" : k.platform === "seekingalpha" ? "📈" : k.platform === "moomoo" ? "🐮" : k.platform === "stocktwits" ? "🐂" : k.platform === "finnhub" ? "📰" : k.platform === "wechat" ? "💬" : "📊"}
               </span>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
@@ -309,7 +309,7 @@ export default function ThermometerContent({
                     >
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-xs text-muted">
-                          {m.platform === "reddit" ? "Reddit" : m.platform === "youtube" ? "YouTube" : m.platform === "twitter" ? "Twitter" : m.platform === "weibo" ? "Weibo" : m.platform === "seekingalpha" ? "Seeking Alpha" : m.platform === "moomoo" ? "Moomoo" : m.platform === "stocktwits" ? "StockTwits" : m.platform === "finnhub" ? "Finnhub" : m.platform}
+                          {m.platform === "reddit" ? "Reddit" : m.platform === "youtube" ? "YouTube" : m.platform === "twitter" ? "Twitter" : m.platform === "weibo" ? "Weibo" : m.platform === "seekingalpha" ? "Seeking Alpha" : m.platform === "moomoo" ? "Moomoo" : m.platform === "stocktwits" ? "StockTwits" : m.platform === "finnhub" ? "Finnhub" : m.platform === "wechat" ? "WeChat" : m.platform}
                         </span>
                         <span className="text-xs font-medium">
                           {m.display_name || m.username}
@@ -341,7 +341,7 @@ export default function ThermometerContent({
 
       <footer className="text-center text-xs text-muted py-4 border-t border-border">
         <p>
-          全球市场温度计 — 自动追踪 Reddit / YouTube / Twitter / Weibo / Seeking Alpha / Moomoo / StockTwits / Finnhub 全球金融市场讨论热度 · 数据仅供参考
+          全球市场温度计 — 自动追踪 Reddit / YouTube / Twitter / Weibo / Seeking Alpha / Moomoo / StockTwits / Finnhub / WeChat 全球金融市场讨论热度 · 数据仅供参考
         </p>
       </footer>
     </div>
