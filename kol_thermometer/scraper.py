@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 import random
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from kol_thermometer.config import (
@@ -32,6 +32,7 @@ from kol_thermometer.config import (
     WECHAT_KOLS,
     WECHAT_ARTICLES_PER_KOL,
     WECHAT_RATE_LIMIT,
+    THERMOMETER_LOOKBACK_DAYS,
 )
 
 logger = logging.getLogger("kol_thermometer.scraper")
@@ -574,14 +575,88 @@ def scrape_moomoo_community(
 # WeChat Official Accounts Scraper (via Sogou WeChat Search)
 # ═══════════════════════════════════════════════════════════════
 
+def _parse_sogou_date(raw: str) -> Optional[str]:
+    """Parse Sogou WeChat search date strings to ISO format 'YYYY-MM-DD HH:MM:SS'.
+
+    Sogou uses Chinese relative date formats:
+      - '刚刚', 'X分钟前', 'X小时前' → today
+      - '昨天' → yesterday
+      - 'X天前' → X days ago
+      - 'X个月前' → X months ago
+      - 'YYYY-MM-DD' or 'YYYY/MM/DD' → absolute date
+      - JavaScript timestamp (ms) → absolute date
+
+    Returns 'YYYY-MM-DD HH:MM:SS' string or None if unparseable.
+    """
+    import re
+
+    if not raw:
+        return None
+
+    raw = raw.strip()
+    now = datetime.now()
+
+    try:
+        # Absolute date formats
+        for fmt in ["%Y-%m-%d", "%Y/%m/%d"]:
+            try:
+                dt = datetime.strptime(raw, fmt)
+                return dt.strftime("%Y-%m-%d 00:00:00")
+            except ValueError:
+                continue
+
+        # JavaScript timestamp (13-digit ms)
+        if raw.isdigit() and len(raw) == 13:
+            try:
+                dt = datetime.fromtimestamp(int(raw) / 1000)
+                return dt.strftime("%Y-%m-%d %H:%M:%S")
+            except (ValueError, OSError):
+                pass
+
+        # Chinese relative dates
+        if "刚刚" in raw or "分钟前" in raw or "小时前" in raw:
+            return now.strftime("%Y-%m-%d %H:%M:%S")
+
+        if "昨天" in raw:
+            dt = now - timedelta(days=1)
+            return dt.strftime("%Y-%m-%d 00:00:00")
+
+        m = re.match(r"(\d+)\s*天前", raw)
+        if m:
+            days = int(m.group(1))
+            dt = now - timedelta(days=days)
+            return dt.strftime("%Y-%m-%d 00:00:00")
+
+        m = re.match(r"(\d+)\s*个月前", raw)
+        if m:
+            months = int(m.group(1))
+            dt = now - timedelta(days=months * 30)
+            return dt.strftime("%Y-%m-%d 00:00:00")
+
+        # Date-only with Chinese characters: e.g. "7月23日"
+        m = re.match(r"(\d{1,2})月(\d{1,2})日", raw)
+        if m:
+            month, day = int(m.group(1)), int(m.group(2))
+            dt = datetime(now.year, month, day)
+            return dt.strftime("%Y-%m-%d 00:00:00")
+
+    except Exception:
+        pass
+
+    logger.debug(f"Could not parse Sogou date: '{raw}'")
+    return None
+
+
 def scrape_wechat_kol(
     account_name: str,
     limit: int = WECHAT_ARTICLES_PER_KOL,
+    max_age_days: int = THERMOMETER_LOOKBACK_DAYS,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Scrape recent articles for a WeChat Official Account via Sogou WeChat Search.
 
-    Searches for the account name on weixin.sogou.com and extracts articles
-    from the search results that match the target account.
+    Searches for the account name on weixin.sogou.com (sorted by time, newest first)
+    and extracts articles matching the target account. Articles older than
+    max_age_days are skipped to ensure freshness.
 
     Returns (posts, kols) where kols has one entry for the account itself.
     """
@@ -591,11 +666,13 @@ def scrape_wechat_kol(
 
     posts = []
     kol_data = None
+    cutoff_date = datetime.now() - timedelta(days=max_age_days)
 
     try:
         page, ctx = _new_page(browser)
 
-        url = f"https://weixin.sogou.com/weixin?type=2&query={account_name}"
+        # tsn=1 sorts by time (newest first), type=2 is article search
+        url = f"https://weixin.sogou.com/weixin?type=2&query={account_name}&tsn=1"
         logger.info(f"WeChat scraping: {account_name}")
         page.goto(url, wait_until="domcontentloaded")
         time.sleep(random.uniform(3, 6))
@@ -613,6 +690,7 @@ def scrape_wechat_kol(
             items = page.query_selector_all("ul.news-list li, div.results div.item, div.weixin-result")
 
         article_count = 0
+        skipped_old = 0
         for item in items:
             if article_count >= limit:
                 break
@@ -629,9 +707,10 @@ def scrape_wechat_kol(
                 summary_el = item.query_selector("p.txt-info, p.desc, div.txt-info, p[class*='txt']")
                 summary = (summary_el.inner_text() or "").strip() if summary_el else ""
 
-                # Date
+                # Date — parse Sogou's Chinese relative format
                 date_el = item.query_selector("span.s2, span.time, span[class*='time'], span[class*='date']")
-                posted_at = (date_el.inner_text() or "").strip() if date_el else ""
+                posted_at_raw = (date_el.inner_text() or "").strip() if date_el else ""
+                posted_at = _parse_sogou_date(posted_at_raw)
 
                 # Source account name in result
                 account_el = item.query_selector("a.account, span.account, span.s1, a[class*='account']")
@@ -641,6 +720,16 @@ def scrape_wechat_kol(
                 if result_account and account_name not in result_account:
                     continue
 
+                # Filter by recency — skip articles older than max_age_days
+                if posted_at:
+                    try:
+                        article_date = datetime.strptime(posted_at[:10], "%Y-%m-%d")
+                        if article_date < cutoff_date:
+                            skipped_old += 1
+                            continue
+                    except ValueError:
+                        pass  # if date parse fails, keep the article rather than lose it
+
                 if title and article_url:
                     posts.append({
                         "platform": "wechat",
@@ -648,7 +737,7 @@ def scrape_wechat_kol(
                         "post_url": article_url,
                         "title": title[:200],
                         "content": summary or title,
-                        "posted_at": posted_at,
+                        "posted_at": posted_at or posted_at_raw,
                         "fetched_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
                         "likes": 0,
                         "comments": 0,
@@ -676,7 +765,7 @@ def scrape_wechat_kol(
         }
 
         ctx.close()
-        logger.info(f"WeChat '{account_name}': {len(posts)} articles")
+        logger.info(f"WeChat '{account_name}': {article_count} articles (skipped {skipped_old} old)")
 
     except Exception as e:
         logger.error(f"WeChat scrape failed for '{account_name}': {e}")
