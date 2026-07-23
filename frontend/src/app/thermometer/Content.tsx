@@ -155,8 +155,9 @@ export default function ThermometerContent({
                 <div className={`text-lg font-bold ${heatColor(s.heat_score)}`}>
                   {s.heat_score.toFixed(0)}°
                 </div>
-                <div className="text-xs text-muted">
-                  {sentimentEmoji(s.sentiment_bias)}{" "}
+                <div className="flex items-center gap-1.5 justify-end text-xs">
+                  <span className="text-red-400" title="Bullish">🔥{s.positive_count ?? 0}</span>
+                  <span className="text-green-400" title="Bearish">🧊{s.negative_count ?? 0}</span>
                   {s.momentum !== 0 && (
                     <span className={s.momentum > 0 ? "text-red-400" : "text-green-400"}>
                       {s.momentum > 0 ? "+" : ""}{s.momentum.toFixed(1)}
@@ -182,11 +183,13 @@ export default function ThermometerContent({
                   <button
                     key={s.stock_code}
                     onClick={() => handleStockClick(s.stock_code)}
-                    className="flex items-center gap-3 p-2 rounded-lg text-left hover:bg-surface-hover transition-all"
+                    className="flex items-center gap-2 p-2 rounded-lg text-left hover:bg-surface-hover transition-all"
                   >
                     <span className="text-sm truncate flex-1">
                       {s.stock_name || s.stock_code}
                     </span>
+                    <span className="text-xs text-red-400">🔥{s.positive_count ?? 0}</span>
+                    <span className="text-xs text-green-400">🧊{s.negative_count ?? 0}</span>
                     <span className="text-xs text-muted">{s.heat_score.toFixed(0)}°</span>
                     <span className="text-xs text-red-400 font-medium">
                       +{s.momentum.toFixed(1)}
@@ -206,11 +209,13 @@ export default function ThermometerContent({
                   <button
                     key={s.stock_code}
                     onClick={() => handleStockClick(s.stock_code)}
-                    className="flex items-center gap-3 p-2 rounded-lg text-left hover:bg-surface-hover transition-all"
+                    className="flex items-center gap-2 p-2 rounded-lg text-left hover:bg-surface-hover transition-all"
                   >
                     <span className="text-sm truncate flex-1">
                       {s.stock_name || s.stock_code}
                     </span>
+                    <span className="text-xs text-red-400">🔥{s.positive_count ?? 0}</span>
+                    <span className="text-xs text-green-400">🧊{s.negative_count ?? 0}</span>
                     <span className="text-xs text-muted">{s.heat_score.toFixed(0)}°</span>
                     <span className="text-xs text-green-400 font-medium">
                       {s.momentum.toFixed(1)}

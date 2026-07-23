@@ -2266,6 +2266,8 @@ export interface ThermometerStock {
   unique_kols: number;
   heat_score: number;
   sentiment_bias: number;
+  positive_count: number;
+  negative_count: number;
   momentum: number;
 }
 

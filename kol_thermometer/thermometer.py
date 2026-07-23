@@ -184,7 +184,8 @@ def normalize_heat(raw_heat: float) -> float:
 def compute_heat_score(mentions: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Compute full heat score for a stock from its mentions.
 
-    Returns heat (0-100), raw_heat, mention_count, sentiment_bias, unique_kols.
+    Returns heat (0-100), raw_heat, mention_count, sentiment_bias,
+    positive_count, negative_count, neutral_count, unique_kols.
     """
     if not mentions:
         return {
@@ -193,6 +194,9 @@ def compute_heat_score(mentions: List[Dict[str, Any]]) -> Dict[str, Any]:
             "mention_count": 0,
             "unique_kols": 0,
             "sentiment_bias": 0.0,
+            "positive_count": 0,
+            "negative_count": 0,
+            "neutral_count": 0,
         }
 
     raw = compute_raw_heat(mentions)
@@ -201,12 +205,19 @@ def compute_heat_score(mentions: List[Dict[str, Any]]) -> Dict[str, Any]:
     sentiments = [m.get("sentiment_score", 0.0) for m in mentions]
     kol_ids = set(m.get("kol_id") for m in mentions if m.get("kol_id"))
 
+    positive = sum(1 for s in sentiments if s > 0.15)
+    negative = sum(1 for s in sentiments if s < -0.15)
+    neutral = len(sentiments) - positive - negative
+
     return {
         "heat_score": heat,
         "raw_heat": raw,
         "mention_count": len(mentions),
         "unique_kols": len(kol_ids),
         "sentiment_bias": round(sum(sentiments) / len(sentiments), 3) if sentiments else 0.0,
+        "positive_count": positive,
+        "negative_count": negative,
+        "neutral_count": neutral,
     }
 
 
