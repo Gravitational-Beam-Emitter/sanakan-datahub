@@ -29,27 +29,68 @@ YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "")
 
 # ── Stock subreddits to monitor ──────────────────────────────
 STOCK_SUBREDDITS = [
+    # US / Global
     "wallstreetbets",
     "stocks",
     "investing",
-    "ChinaStocks",
     "StockMarket",
     "SPACs",
     "pennystocks",
     "dividends",
     "options",
     "daytrading",
+    "quant",
+    "algotrading",
+    "economics",
+    # ETFs
+    "ETFs",
+    # Crypto
+    "CryptoCurrency",
+    "CryptoMarkets",
+    # Commodities
+    "Commodities",
+    "Gold",
+    # Europe
+    "EUStock",
+    "UKInvesting",
+    "Finanzen",
+    # Asia
+    "ChinaStocks",
+    "JapanFinance",
+    "KoreaStockMarket",
+    "IndianStockMarket",
+    "DalalStreetTalks",
+    # Oceania
+    "ASX_Bets",
+    "AusFinance",
 ]
 
 # ── YouTube search queries for KOL discovery ─────────────────
 YOUTUBE_SEARCH_QUERIES = [
+    # English — global
     "stock analysis",
-    "A股分析",
-    "股票推荐",
-    "market outlook",
-    "投资策略",
-    "stock picks",
+    "stock market outlook",
+    "stock picks this week",
     "earnings analysis",
+    "global markets outlook",
+    "emerging markets investing",
+    # Europe
+    "European stocks analysis",
+    "FTSE DAX CAC analysis",
+    # Asia
+    "日本株 分析",
+    "한국 주식 투자",
+    "Indian stock market analysis",
+    "A股分析",
+    "港股分析",
+    # Oceania
+    "ASX stocks analysis",
+    # Crypto / Commodities / Forex
+    "crypto market analysis",
+    "commodities trading outlook",
+    "forex market analysis",
+    # ETFs
+    "ETF investing strategy",
 ]
 
 # ── Rate limits ──────────────────────────────────────────────
@@ -76,8 +117,8 @@ THERMOMETER_RECENCY_HALF_LIFE = 48  # hours for recency decay half-life
 PLATFORM_MULTIPLIERS = {
     "reddit": 0.8,
     "youtube": 0.7,
-    "guba": 1.0,
-    "xueqiu": 0.9,
+    "twitter": 0.6,
+    "seekingalpha": 0.8,
 }
 
 # ── Tier base weights ────────────────────────────────────────

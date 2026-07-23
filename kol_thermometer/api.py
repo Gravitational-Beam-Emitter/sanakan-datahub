@@ -50,8 +50,8 @@ def _clean_records(records):
 
 
 app = FastAPI(
-    title="Market Thermometer (市场温度计) API",
-    description="KOL stock sentiment tracking — Reddit, YouTube, 股吧",
+    title="Global Market Thermometer (全球市场温度计) API",
+    description="KOL sentiment tracking across global financial markets — Reddit, YouTube, global forums",
     version="0.1.0",
 )
 

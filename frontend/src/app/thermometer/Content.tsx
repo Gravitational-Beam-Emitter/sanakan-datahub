@@ -109,7 +109,7 @@ export default function ThermometerContent({
       {/* Market filter */}
       {tab !== "detail" && (
         <div className="flex gap-2">
-          {["", "US", "CN", "HK"].map((m) => (
+          {["", "US", "CN", "HK", "EU", "JP", "KR", "IN", "Crypto", "Global"].map((m) => (
             <button
               key={m}
               onClick={() => setMarket(m)}
@@ -324,7 +324,7 @@ export default function ThermometerContent({
                               : "text-muted"
                           }`}
                         >
-                          {m.sentiment_label === "positive" ? "看多" : m.sentiment_label === "negative" ? "看空" : "中性"}
+                          {m.sentiment_label === "positive" ? "Bullish" : m.sentiment_label === "negative" ? "Bearish" : "Neutral"}
                         </span>
                       </div>
                       <p className="text-xs text-muted line-clamp-2">
@@ -341,7 +341,7 @@ export default function ThermometerContent({
 
       <footer className="text-center text-xs text-muted py-4 border-t border-border">
         <p>
-          市场温度计 — 自动追踪 Reddit / YouTube 大V 吹票热度 · 数据仅供参考
+          全球市场温度计 — 自动追踪 Reddit / YouTube 大V 全球金融市场讨论热度 · 数据仅供参考
         </p>
       </footer>
     </div>

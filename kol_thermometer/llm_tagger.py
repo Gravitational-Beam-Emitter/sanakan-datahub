@@ -135,28 +135,39 @@ def extract_stock_mentions(posts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     combined = "\n\n".join(posts_text)
 
     system_prompt = (
-        "You are a financial analyst assistant. Extract all stock/ETF mentions from "
-        "social media posts and classify sentiment. Return strict JSON only."
+        "You are a global financial analyst assistant. Extract ALL stock/ETF/crypto "
+        "mentions from social media posts across worldwide markets and classify sentiment. "
+        "Return strict JSON only."
     )
 
-    user_prompt = f"""Analyze the following social media posts. For each post, extract ALL stock tickers or company names mentioned, and classify the sentiment toward each stock.
+    user_prompt = f"""Analyze the following social media posts from global financial communities. For each post, extract ALL stock tickers, company names, ETFs, or crypto assets mentioned, and classify the sentiment toward each.
 
-For each stock mention, provide:
+For each mention, provide:
 - post_index: the [N] index of the post
-- stock_code: the ticker symbol (e.g., AAPL, TSLA, 000768) or company name if ticker unclear
-- stock_name: full company name if known
-- market: US, CN, HK, or unknown
+- stock_code: the ticker symbol or asset code (e.g., AAPL, 005930, BTC, SPY)
+- stock_name: full company/asset name if known
+- market: US, CN, HK, JP, KR, EU, IN, AU, Crypto, or unknown
 - mention_context: the sentence or phrase mentioning the stock (max 100 chars)
 - sentiment_score: -1.0 (strongly bearish) to +1.0 (strongly bullish), 0 = neutral
 - sentiment_label: "positive", "negative", or "neutral"
-- confidence: 0.0 to 1.0, how confident you are that a stock is actually being discussed
+- confidence: 0.0 to 1.0
 
-Rules:
-- Only include CLEAR stock/ETF mentions. If a post is about general market sentiment without specific stocks, return no mentions for it.
-- Chinese A-share stocks use 6-digit codes. US stocks use 1-5 letter tickers. HK stocks use 4-5 digit codes.
-- If someone says "buy", "bullish", "to the moon", "看涨", "买入" → positive sentiment
-- If someone says "sell", "bearish", "crash", "看跌", "卖出" → negative sentiment
-- Sarcasm detection: if the post is clearly sarcastic, flip the sentiment
+Ticker formats by market:
+- US: 1-5 letter tickers (AAPL, TSLA, MSFT, AMZN, GOOGL)
+- CN (A-share): 6-digit codes (000768, 600519)
+- HK: 4-5 digit codes (0700, 09988, 0005)
+- JP: 4-digit codes (7203=Toyota, 9984=SoftBank, 6758=Sony)
+- KR: 6-digit codes (005930=Samsung, 000660=SK Hynix)
+- EU: ticker with exchange suffix (MC.PA, SAP.DE, HSBA.L, VOW3.DE)
+- IN: NSE/BSE symbols (RELIANCE, TCS, INFY, HDFC)
+- AU: 3-letter ASX codes (BHP, CBA, FMG, WBC)
+- Crypto: BTC, ETH, SOL, XRP, DOGE, etc.
+- ETFs: SPY, QQQ, IWM, ARKK, EEM, VWO, FXI, EWJ, EWY, INDA
+
+Multilingual sentiment patterns:
+- Bullish/Positive: "buy", "long", "bullish", "moon", "rocket", "看涨", "买入", "買い", "매수", "longieren", "acheter"
+- Bearish/Negative: "sell", "short", "bearish", "crash", "dump", "看跌", "卖出", "売り", "매도", "shorten", "vendre"
+- Sarcasm detection: if the post is clearly sarcastic or ironic, flip the sentiment
 
 Posts:
 {combined}
@@ -164,7 +175,7 @@ Posts:
 Return a JSON array:
 [{{"post_index": 0, "stock_code": "TSLA", "stock_name": "Tesla", "market": "US", "mention_context": "...", "sentiment_score": 0.8, "sentiment_label": "positive", "confidence": 0.95}}]
 
-Return empty array [] if no stocks are mentioned in any post."""
+Return empty array [] if no specific stocks/assets are mentioned."""
     text = _call_llm(system_prompt, user_prompt)
     if not text:
         return []
