@@ -2239,3 +2239,122 @@ export async function fetchKrLeverageETF(
   if (!res.ok) return null;
   return res.json();
 }
+
+/* ── KOL Thermometer (:8010) ── */
+
+const KOL_API = process.env.NEXT_PUBLIC_KOL_API_URL || "http://127.0.0.1:8010";
+
+export interface KolItem {
+  id: number;
+  platform: string;
+  username: string;
+  display_name: string;
+  followers: number;
+  tier: string;
+  total_score: number;
+  base_weight: number;
+  posts_per_week: number;
+  last_post_date: string;
+}
+
+export interface ThermometerStock {
+  date: string;
+  stock_code: string;
+  stock_name: string;
+  market: string;
+  mention_count: number;
+  unique_kols: number;
+  heat_score: number;
+  sentiment_bias: number;
+  momentum: number;
+}
+
+export interface StockMention {
+  stock_code: string;
+  sentiment_score: number;
+  sentiment_label: string;
+  mention_context: string;
+  post_title: string;
+  posted_at: string;
+  platform: string;
+  username: string;
+  display_name: string;
+  tier: string;
+}
+
+export interface KolThermometerStats {
+  active_kols: number;
+  total_posts: number;
+  total_mentions: number;
+  thermometer_days: number;
+  tier_distribution: { tier: string; cnt: number }[];
+  platform_distribution: { platform: string; cnt: number }[];
+}
+
+export async function fetchKols(params?: {
+  platform?: string; tier?: string; limit?: number;
+}): Promise<{ count: number; kols: KolItem[] }> {
+  const sp = new URLSearchParams();
+  if (params?.platform) sp.set("platform", params.platform);
+  if (params?.tier) sp.set("tier", params.tier);
+  if (params?.limit) sp.set("limit", String(params.limit));
+  const qs = sp.toString();
+  const res = await fetch(`${KOL_API}/api/v1/kols${qs ? `?${qs}` : ""}`, {
+    next: { revalidate: 300 },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) return { count: 0, kols: [] };
+  return res.json();
+}
+
+export async function fetchThermometer(params?: {
+  market?: string; min_heat?: number; limit?: number;
+}): Promise<{ count: number; stocks: ThermometerStock[] }> {
+  const sp = new URLSearchParams();
+  if (params?.market) sp.set("market", params.market);
+  if (params?.min_heat) sp.set("min_heat", String(params.min_heat ?? 0));
+  if (params?.limit) sp.set("limit", String(params.limit ?? 50));
+  const qs = sp.toString();
+  const res = await fetch(`${KOL_API}/api/v1/thermometer${qs ? `?${qs}` : ""}`, {
+    next: { revalidate: 120 },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) return { count: 0, stocks: [] };
+  return res.json();
+}
+
+export async function fetchThermometerStock(stockCode: string, days = 14): Promise<{
+  stock_code: string; thermometer_history: ThermometerStock[]; recent_mentions: StockMention[];
+} | null> {
+  const res = await fetch(`${KOL_API}/api/v1/thermometer/${stockCode}?days=${days}`, {
+    next: { revalidate: 120 },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export async function fetchKolMentions(params?: {
+  stock_code?: string; platform?: string; limit?: number;
+}): Promise<{ count: number; mentions: any[] }> {
+  const sp = new URLSearchParams();
+  if (params?.stock_code) sp.set("stock_code", params.stock_code);
+  if (params?.platform) sp.set("platform", params.platform);
+  if (params?.limit) sp.set("limit", String(params.limit ?? 50));
+  const qs = sp.toString();
+  const res = await fetch(`${KOL_API}/api/v1/mentions${qs ? `?${qs}` : ""}`, {
+    next: { revalidate: 120 },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) return { count: 0, mentions: [] };
+  return res.json();
+}
+
+export async function fetchKolStats(): Promise<KolThermometerStats | null> {
+  const res = await fetch(`${KOL_API}/api/v1/stats`, {
+    next: { revalidate: 300 },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) return null;
+  return res.json();
+}

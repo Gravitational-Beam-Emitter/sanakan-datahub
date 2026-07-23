@@ -16,6 +16,7 @@ const TABS = [
   { href: "/kr-stock", label: "KR韩股" },
   { href: "/industry-chain", label: "产业链" },
   { href: "/hynix", label: "海力士" },
+  { href: "/thermometer", label: "温度计" },
 ];
 
 export default function NavBar() {
