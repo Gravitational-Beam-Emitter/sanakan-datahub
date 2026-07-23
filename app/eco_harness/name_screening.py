@@ -557,7 +557,7 @@ class NameScreeningHarness:
         Returns:
             {
                 query: str,
-                matches: { sanctions: [...], peps: [...], other: [...] },
+                sanctions: [...], peps: [...], other: [...],
                 negative_news: [...] | None,
                 court_records: dict | None,
                 total_hits: int,
@@ -576,7 +576,9 @@ class NameScreeningHarness:
             if candidates.empty:
                 return {
                     "query": query,
-                    "matches": {"sanctions": [], "peps": [], "other": []},
+                    "sanctions": [],
+                    "peps": [],
+                    "other": [],
                     "negative_news": None,
                     "court_records": None,
                     "total_hits": 0,
@@ -607,11 +609,9 @@ class NameScreeningHarness:
 
         return {
             "query": query,
-            "matches": {
-                "sanctions": match_result["sanctions"],
-                "peps": match_result["peps"],
-                "other": match_result["other"],
-            },
+            "sanctions": match_result["sanctions"],
+            "peps": match_result["peps"],
+            "other": match_result["other"],
             "negative_news": negative_news,
             "court_records": court_records,
             "total_hits": total,

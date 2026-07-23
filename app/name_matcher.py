@@ -287,6 +287,11 @@ class NameMatcher:
                 "countries": row.get("countries"),
                 "match_score": row.get("match_score"),
                 "notes": row.get("notes"),
+                "aliases": row.get("aliases"),
+                "addresses": row.get("addresses"),
+                "programs": row.get("programs"),
+                "source_date": row.get("source_date"),
+                "name_type": row.get("name_type"),
             }
             risk = str(row.get("risk_category", "") or "").lower()
             if "sanction" in risk:
