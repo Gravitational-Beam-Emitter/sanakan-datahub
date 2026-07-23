@@ -27,6 +27,50 @@ REDDIT_USER_AGENT = os.environ.get("REDDIT_USER_AGENT", "kol-thermometer/1.0")
 # ── YouTube Data API v3 ──────────────────────────────────────
 YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "")
 
+# ── StockTwits API ──────────────────────────────────────────
+STOCKTWITS_ACCESS_TOKEN = os.environ.get("STOCKTWITS_ACCESS_TOKEN", "")
+STOCKTWITS_SYMBOLS_LIMIT = 100      # top trending symbols to fetch
+STOCKTWITS_MESSAGES_PER_SYMBOL = 30  # messages per symbol
+STOCKTWITS_RATE_LIMIT = 0.5          # seconds between API calls
+
+# ── Finnhub API ─────────────────────────────────────────────
+FINNHUB_API_KEY = os.environ.get("FINNHUB_API_KEY", "")
+FINNHUB_NEWS_LIMIT = 50             # articles per fetch
+FINNHUB_SENTIMENT_LIMIT = 30        # symbols for social sentiment
+FINNHUB_RATE_LIMIT = 0.5            # seconds between API calls
+
+# ── Playwright scraping ─────────────────────────────────────
+PLAYWRIGHT_HEADLESS = os.environ.get("PLAYWRIGHT_HEADLESS", "1") == "1"
+PLAYWRIGHT_TIMEOUT = 30000           # ms per page load
+
+# ── Twitter/X scraping ──────────────────────────────────────
+TWITTER_SEARCH_QUERIES = [
+    "$TSLA", "$AAPL", "$NVDA", "$MSFT", "$AMZN", "$GOOGL",
+    "$META", "$AMD", "$PLTR", "$CRWD", "$SMCI", "$COIN",
+    "$SPY", "$QQQ", "$IWM", "$DIA",
+    "$BTC", "$ETH", "$SOL",
+    "$FXI", "$EWJ", "$EWY",
+]
+TWITTER_TWEETS_PER_QUERY = 30
+
+# ── Weibo scraping ──────────────────────────────────────────
+WEIBO_SEARCH_QUERIES = [
+    "茅台", "宁德时代", "比亚迪", "中芯国际",
+    "AI概念股", "新能源", "半导体", "芯片",
+    "港股", "美股", "A股行情",
+]
+WEIBO_POSTS_PER_QUERY = 20
+
+# ── Seeking Alpha scraping ──────────────────────────────────
+SEEKINGALPHA_NEWS_LIMIT = 50
+
+# ── Moomoo (富途) scraping ──────────────────────────────────
+MOOMOO_SYMBOLS = [
+    "AAPL", "TSLA", "NVDA", "MSFT", "AMZN", "GOOGL",
+    "META", "AMD", "PLTR", "COIN",
+]
+MOOMOO_POSTS_PER_SYMBOL = 20
+
 # ── Stock subreddits to monitor ──────────────────────────────
 STOCK_SUBREDDITS = [
     # US / Global
@@ -117,8 +161,12 @@ THERMOMETER_RECENCY_HALF_LIFE = 48  # hours for recency decay half-life
 PLATFORM_MULTIPLIERS = {
     "reddit": 0.8,
     "youtube": 0.7,
-    "twitter": 0.6,
-    "seekingalpha": 0.8,
+    "stocktwits": 0.85,
+    "finnhub": 0.5,
+    "twitter": 0.8,
+    "weibo": 0.9,
+    "seekingalpha": 0.7,
+    "moomoo": 0.75,
 }
 
 # ── Tier base weights ────────────────────────────────────────

@@ -458,7 +458,7 @@ def get_mentions_for_thermometer(
         FROM stock_mentions m
         JOIN kol_posts p ON m.post_id = p.id
         JOIN kols k ON m.kol_id = k.id
-        WHERE p.posted_at >= CURRENT_DATE - INTERVAL '? days'
+        WHERE CAST(p.posted_at AS DATE) >= CURRENT_DATE - ?
           AND k.is_active = 1
         ORDER BY p.posted_at DESC
     """, [lookback_days]).fetchall()

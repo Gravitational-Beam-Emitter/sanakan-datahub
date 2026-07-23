@@ -30,6 +30,21 @@ from kol_thermometer.config import (
     KOL_MIN_REDDIT_KARMA,
     KOL_MIN_REDDIT_POSTS,
     KOL_MIN_YOUTUBE_SUBS,
+    STOCKTWITS_ACCESS_TOKEN,
+    STOCKTWITS_SYMBOLS_LIMIT,
+    STOCKTWITS_MESSAGES_PER_SYMBOL,
+    STOCKTWITS_RATE_LIMIT,
+    FINNHUB_API_KEY,
+    FINNHUB_NEWS_LIMIT,
+    FINNHUB_SENTIMENT_LIMIT,
+    FINNHUB_RATE_LIMIT,
+    TWITTER_SEARCH_QUERIES,
+    TWITTER_TWEETS_PER_QUERY,
+    WEIBO_SEARCH_QUERIES,
+    WEIBO_POSTS_PER_QUERY,
+    SEEKINGALPHA_NEWS_LIMIT,
+    MOOMOO_SYMBOLS,
+    MOOMOO_POSTS_PER_SYMBOL,
 )
 from kol_thermometer.storage import (
     init_db,
@@ -424,6 +439,733 @@ def fetch_youtube(conn, queries: Optional[List[str]] = None,
 
 
 # ═══════════════════════════════════════════════════════════════
+# Playwright availability check
+# ═══════════════════════════════════════════════════════════════
+
+def _check_playwright_available() -> bool:
+    """Check if Playwright scraping is available."""
+    from kol_thermometer.scraper import _check_playwright
+    return _check_playwright()
+
+
+# ═══════════════════════════════════════════════════════════════
+# Twitter/X Fetcher (Playwright)
+# ═══════════════════════════════════════════════════════════════
+
+def fetch_twitter(conn, queries: Optional[List[str]] = None,
+                  tweets_per_query: int = TWITTER_TWEETS_PER_QUERY,
+                  is_init: bool = False) -> Dict[str, Any]:
+    """Scrape Twitter/X search results for $CASHTAG queries via Playwright.
+
+    Auto-discovers KOLs from tweet authors. Posts go through LLM tagging.
+    Returns summary dict.
+    """
+    from kol_thermometer.scraper import scrape_twitter_all
+
+    if not _check_playwright_available():
+        return {"source": "twitter", "status": "skipped", "reason": "playwright not installed"}
+
+    search_queries = queries or TWITTER_SEARCH_QUERIES
+    total_posts = 0
+    total_kols = 0
+
+    try:
+        logger.info("Twitter/X: scraping search results via Playwright...")
+        all_posts, all_kols = scrape_twitter_all(queries=search_queries)
+
+        if all_posts:
+            total_posts = upsert_posts_batch(conn, all_posts)
+
+        max_followers = get_max_followers(conn, "twitter")
+        for kc in all_kols:
+            if kc["followers"] < 500 and not is_init:
+                continue
+            pc = kc["post_count"]
+            posts_per_week = pc / max(is_init and 30 or 7, 1) * 7
+            avg_likes = kc["total_likes"] / max(pc, 1)
+            avg_comments = kc["total_comments"] / max(pc, 1)
+
+            scores = compute_kol_score(
+                followers=kc["followers"],
+                max_followers=max(max_followers, kc["followers"]),
+                avg_likes=avg_likes,
+                avg_comments=avg_comments,
+                avg_shares=0,
+                posts_per_week=posts_per_week,
+                account_age_days=kc["account_age_days"],
+                stock_mention_ratio=0.5,
+            )
+            tier = assign_tier(scores["total_score"])
+            weight = compute_kol_weight(tier, "twitter")
+
+            kc.update({
+                "avg_likes": avg_likes,
+                "avg_comments": avg_comments,
+                "avg_shares": 0,
+                "avg_views": 0,
+                "posts_per_week": round(posts_per_week, 2),
+                "stock_mention_ratio": 0.5,
+                "total_score": scores["total_score"],
+                "score_reach": scores["reach"],
+                "score_engagement": scores["engagement"],
+                "score_consistency": scores["consistency"],
+                "score_relevance": scores["stock_relevance"],
+                "score_impact": scores["impact"],
+                "tier": tier,
+                "base_weight": weight,
+                "first_seen_date": TODAY,
+                "last_active_date": TODAY,
+                "is_active": 1,
+            })
+            kid = upsert_kol(conn, kc)
+            if kid:
+                total_kols += 1
+                conn.execute(
+                    "UPDATE kol_posts SET kol_id = ? WHERE platform = 'twitter' AND kol_id IS NULL",
+                    [kid],
+                )
+
+            logger.info(f"Twitter: {total_posts} tweets, {total_kols} KOLs")
+
+    except Exception as e:
+        logger.error(f"Twitter fetch failed: {e}")
+        return {"source": "twitter", "status": "error", "reason": str(e)}
+
+    return {
+        "source": "twitter",
+        "status": "ok",
+        "queries": len(search_queries),
+        "posts_fetched": total_posts,
+        "kols_discovered": total_kols,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════
+# Weibo Fetcher (Playwright)
+# ═══════════════════════════════════════════════════════════════
+
+def fetch_weibo(conn, queries: Optional[List[str]] = None,
+                posts_per_query: int = WEIBO_POSTS_PER_QUERY,
+                is_init: bool = False) -> Dict[str, Any]:
+    """Scrape Weibo search results for stock names via Playwright.
+
+    Auto-discovers KOLs from Weibo users. Posts go through LLM tagging.
+    Returns summary dict.
+    """
+    from kol_thermometer.scraper import scrape_weibo_all
+
+    if not _check_playwright_available():
+        return {"source": "weibo", "status": "skipped", "reason": "playwright not installed"}
+
+    search_queries = queries or WEIBO_SEARCH_QUERIES
+    total_posts = 0
+    total_kols = 0
+
+    try:
+        logger.info("Weibo: scraping search results via Playwright...")
+        all_posts, all_kols = scrape_weibo_all(queries=search_queries)
+
+        if all_posts:
+            total_posts = upsert_posts_batch(conn, all_posts)
+
+        max_followers = get_max_followers(conn, "weibo")
+        for kc in all_kols:
+            if kc["followers"] < 500 and not is_init:
+                continue
+            pc = kc["post_count"]
+            posts_per_week = pc / max(is_init and 30 or 7, 1) * 7
+            avg_likes = kc["total_likes"] / max(pc, 1)
+
+            scores = compute_kol_score(
+                followers=kc["followers"],
+                max_followers=max(max_followers, kc["followers"]),
+                avg_likes=avg_likes,
+                avg_comments=kc.get("total_comments", 0) / max(pc, 1),
+                avg_shares=0,
+                posts_per_week=posts_per_week,
+                account_age_days=kc["account_age_days"],
+                stock_mention_ratio=0.4,
+            )
+            tier = assign_tier(scores["total_score"])
+            weight = compute_kol_weight(tier, "weibo")
+
+            kc.update({
+                "avg_likes": avg_likes,
+                "avg_comments": kc.get("total_comments", 0) / max(pc, 1),
+                "avg_shares": 0,
+                "avg_views": 0,
+                "posts_per_week": round(posts_per_week, 2),
+                "stock_mention_ratio": 0.4,
+                "total_score": scores["total_score"],
+                "score_reach": scores["reach"],
+                "score_engagement": scores["engagement"],
+                "score_consistency": scores["consistency"],
+                "score_relevance": scores["stock_relevance"],
+                "score_impact": scores["impact"],
+                "tier": tier,
+                "base_weight": weight,
+                "first_seen_date": TODAY,
+                "last_active_date": TODAY,
+                "is_active": 1,
+            })
+            kid = upsert_kol(conn, kc)
+            if kid:
+                total_kols += 1
+                conn.execute(
+                    "UPDATE kol_posts SET kol_id = ? WHERE platform = 'weibo' AND kol_id IS NULL",
+                    [kid],
+                )
+
+        logger.info(f"Weibo: {total_posts} posts, {total_kols} KOLs")
+
+    except Exception as e:
+        logger.error(f"Weibo fetch failed: {e}")
+        return {"source": "weibo", "status": "error", "reason": str(e)}
+
+    return {
+        "source": "weibo",
+        "status": "ok",
+        "queries": len(search_queries),
+        "posts_fetched": total_posts,
+        "kols_discovered": total_kols,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════
+# Seeking Alpha Fetcher (Playwright)
+# ═══════════════════════════════════════════════════════════════
+
+def fetch_seekingalpha(conn, news_limit: int = SEEKINGALPHA_NEWS_LIMIT) -> Dict[str, Any]:
+    """Scrape Seeking Alpha news/analysis headlines via Playwright.
+
+    Authors are treated as KOL candidates. Posts go through LLM tagging.
+    Returns summary dict.
+    """
+    from kol_thermometer.scraper import scrape_seekingalpha_news
+
+    if not _check_playwright_available():
+        return {"source": "seekingalpha", "status": "skipped", "reason": "playwright not installed"}
+
+    total_posts = 0
+    total_kols = 0
+
+    try:
+        logger.info("Seeking Alpha: scraping via Playwright...")
+        all_posts, all_kols = scrape_seekingalpha_news(limit=news_limit)
+
+        if all_posts:
+            total_posts = upsert_posts_batch(conn, all_posts)
+
+        max_followers = get_max_followers(conn, "seekingalpha")
+        for kc in all_kols:
+            if kc["followers"] < 500:
+                continue
+            pc = kc["post_count"]
+            posts_per_week = pc / 7.0 * 7
+
+            scores = compute_kol_score(
+                followers=kc["followers"],
+                max_followers=max(max_followers, kc["followers"]),
+                avg_likes=0,
+                avg_comments=0,
+                avg_shares=0,
+                posts_per_week=posts_per_week,
+                account_age_days=kc["account_age_days"],
+                stock_mention_ratio=0.9,  # Seeking Alpha is entirely stock-focused
+            )
+            tier = assign_tier(scores["total_score"])
+            weight = compute_kol_weight(tier, "seekingalpha")
+
+            kc.update({
+                "avg_likes": 0,
+                "avg_comments": 0,
+                "avg_shares": 0,
+                "avg_views": 0,
+                "posts_per_week": round(posts_per_week, 2),
+                "stock_mention_ratio": 0.9,
+                "total_score": scores["total_score"],
+                "score_reach": scores["reach"],
+                "score_engagement": scores["engagement"],
+                "score_consistency": scores["consistency"],
+                "score_relevance": scores["stock_relevance"],
+                "score_impact": scores["impact"],
+                "tier": tier,
+                "base_weight": weight,
+                "first_seen_date": TODAY,
+                "last_active_date": TODAY,
+                "is_active": 1,
+            })
+            kid = upsert_kol(conn, kc)
+            if kid:
+                total_kols += 1
+                conn.execute(
+                    "UPDATE kol_posts SET kol_id = ? WHERE platform = 'seekingalpha' AND kol_id IS NULL",
+                    [kid],
+                )
+
+        logger.info(f"Seeking Alpha: {total_posts} articles, {total_kols} KOLs")
+
+    except Exception as e:
+        logger.error(f"Seeking Alpha fetch failed: {e}")
+        return {"source": "seekingalpha", "status": "error", "reason": str(e)}
+
+    return {
+        "source": "seekingalpha",
+        "status": "ok",
+        "posts_fetched": total_posts,
+        "kols_discovered": total_kols,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════
+# Moomoo (富途) Fetcher (Playwright)
+# ═══════════════════════════════════════════════════════════════
+
+def fetch_moomoo(conn, symbols: Optional[List[str]] = None,
+                 posts_per_symbol: int = MOOMOO_POSTS_PER_SYMBOL,
+                 is_init: bool = False) -> Dict[str, Any]:
+    """Scrape Moomoo (富途牛牛) community stock discussions via Playwright.
+
+    Auto-discovers KOLs from community users. Posts go through LLM tagging.
+    Returns summary dict.
+    """
+    from kol_thermometer.scraper import scrape_moomoo_all
+
+    if not _check_playwright_available():
+        return {"source": "moomoo", "status": "skipped", "reason": "playwright not installed"}
+
+    syms = symbols or MOOMOO_SYMBOLS
+    total_posts = 0
+    total_kols = 0
+
+    try:
+        logger.info(f"Moomoo: scraping {len(syms)} symbols via Playwright...")
+        all_posts, all_kols = scrape_moomoo_all(symbols=syms)
+
+        if all_posts:
+            total_posts = upsert_posts_batch(conn, all_posts)
+
+        max_followers = get_max_followers(conn, "moomoo")
+        for kc in all_kols:
+            if kc["followers"] < 100 and not is_init:
+                continue
+            pc = kc["post_count"]
+            posts_per_week = pc / max(is_init and 30 or 7, 1) * 7
+            avg_likes = kc["total_likes"] / max(pc, 1)
+
+            scores = compute_kol_score(
+                followers=kc["followers"],
+                max_followers=max(max_followers, kc["followers"]),
+                avg_likes=avg_likes,
+                avg_comments=kc.get("total_comments", 0) / max(pc, 1),
+                avg_shares=0,
+                posts_per_week=posts_per_week,
+                account_age_days=kc["account_age_days"],
+                stock_mention_ratio=0.7,
+            )
+            tier = assign_tier(scores["total_score"])
+            weight = compute_kol_weight(tier, "moomoo")
+
+            kc.update({
+                "avg_likes": avg_likes,
+                "avg_comments": kc.get("total_comments", 0) / max(pc, 1),
+                "avg_shares": 0,
+                "avg_views": 0,
+                "posts_per_week": round(posts_per_week, 2),
+                "stock_mention_ratio": 0.7,
+                "total_score": scores["total_score"],
+                "score_reach": scores["reach"],
+                "score_engagement": scores["engagement"],
+                "score_consistency": scores["consistency"],
+                "score_relevance": scores["stock_relevance"],
+                "score_impact": scores["impact"],
+                "tier": tier,
+                "base_weight": weight,
+                "first_seen_date": TODAY,
+                "last_active_date": TODAY,
+                "is_active": 1,
+            })
+            kid = upsert_kol(conn, kc)
+            if kid:
+                total_kols += 1
+                conn.execute(
+                    "UPDATE kol_posts SET kol_id = ? WHERE platform = 'moomoo' AND kol_id IS NULL",
+                    [kid],
+                )
+
+        logger.info(f"Moomoo: {total_posts} posts, {total_kols} KOLs")
+
+    except Exception as e:
+        logger.error(f"Moomoo fetch failed: {e}")
+        return {"source": "moomoo", "status": "error", "reason": str(e)}
+
+    return {
+        "source": "moomoo",
+        "status": "ok",
+        "symbols_scanned": len(syms),
+        "posts_fetched": total_posts,
+        "kols_discovered": total_kols,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════
+# StockTwits Fetcher
+# ═══════════════════════════════════════════════════════════════
+
+def _get_stocktwits_headers():
+    """Build StockTwits API headers. Returns None if not configured."""
+    if not STOCKTWITS_ACCESS_TOKEN:
+        logger.warning("StockTwits access token not configured. Set STOCKTWITS_ACCESS_TOKEN in .env")
+        return None
+    return {"Authorization": f"Bearer {STOCKTWITS_ACCESS_TOKEN}"}
+
+
+def fetch_stocktwits(conn, symbols_limit: int = STOCKTWITS_SYMBOLS_LIMIT,
+                     messages_per_symbol: int = STOCKTWITS_MESSAGES_PER_SYMBOL) -> Dict[str, Any]:
+    """Fetch messages from StockTwits trending symbols. Auto-discovers KOLs.
+
+    StockTwits messages have built-in sentiment (bullish/bearish), so we bypass
+    LLM tagging for this source and store sentiment directly.
+
+    Returns summary dict.
+    """
+    import requests as req
+
+    headers = _get_stocktwits_headers()
+    if headers is None:
+        return {"source": "stocktwits", "status": "skipped", "reason": "no access token configured"}
+
+    base = "https://api.stocktwits.com/api/2"
+    total_posts = 0
+    total_kols = 0
+    total_mentions = 0
+    errors = []
+
+    try:
+        # Step 1: Get trending symbols
+        logger.info("StockTwits: fetching trending symbols...")
+        resp = req.get(f"{base}/trending/symbols.json", headers=headers, timeout=30)
+        resp.raise_for_status()
+        trending_data = resp.json()
+        symbols = [s["symbol"] for s in trending_data.get("symbols", [])[:symbols_limit]]
+        logger.info(f"StockTwits: {len(symbols)} trending symbols")
+    except Exception as e:
+        return {"source": "stocktwits", "status": "error", "reason": f"trending fetch failed: {e}"}
+
+    max_followers = get_max_followers(conn, "stocktwits")
+
+    for symbol in symbols:
+        try:
+            resp = req.get(
+                f"{base}/streams/symbol/{symbol}.json",
+                headers=headers,
+                params={"limit": messages_per_symbol},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+            posts_data = []
+            kol_candidates: Dict[int, Dict[str, Any]] = {}
+
+            for msg in data.get("messages", []):
+                user = msg.get("user", {})
+                user_id = user.get("id")
+                if not user_id:
+                    continue
+
+                username = user.get("username", "")
+                created = msg.get("created_at", "").replace("T", " ").replace("Z", "")
+
+                post = {
+                    "platform": "stocktwits",
+                    "post_id": str(msg.get("id", "")),
+                    "post_url": f"https://stocktwits.com/{username}/message/{msg.get('id', '')}",
+                    "title": (msg.get("body", "") or "")[:200],
+                    "content": msg.get("body", "") or "",
+                    "posted_at": created,
+                    "fetched_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+                    "likes": msg.get("likes", {}).get("total", 0),
+                    "comments": msg.get("conversation", {}).get("total", 0),
+                    "shares": msg.get("reshare_count", 0),
+                    "views": msg.get("impressions", 0),
+                    "kol_id": None,
+                }
+                posts_data.append(post)
+
+                # Aggregate KOL info
+                if user_id not in kol_candidates:
+                    followers = user.get("followers", 0)
+                    ideas = user.get("ideas", 0)
+                    likes_received = user.get("like_count", 0)
+
+                    kol_candidates[user_id] = {
+                        "platform": "stocktwits",
+                        "username": username,
+                        "display_name": user.get("name", username),
+                        "profile_url": user.get("avatar_url", f"https://stocktwits.com/{username}"),
+                        "followers": followers,
+                        "account_age_days": 0,
+                        "post_count": ideas,
+                        "total_likes": likes_received,
+                        "total_comments": 0,
+                    }
+                else:
+                    kol_candidates[user_id]["total_likes"] += msg.get("likes", {}).get("total", 0)
+
+            # Upsert posts
+            if posts_data:
+                count = upsert_posts_batch(conn, posts_data)
+                total_posts += count
+
+                # StockTwits messages have built-in sentiment → store directly as mentions
+                for msg in data.get("messages", []):
+                    body = msg.get("body", "")
+                    if not body:
+                        continue
+
+                    entities = msg.get("entities", {})
+                    sentiment_raw = entities.get("sentiment")
+                    if sentiment_raw:
+                        sentiment_label = str(sentiment_raw.get("basic", "neutral")).lower()
+                        sentiment_score = {"bullish": 0.7, "bearish": -0.7, "moderate": 0.0}.get(
+                            sentiment_label, 0.0
+                        )
+                    else:
+                        sentiment_label = "neutral"
+                        sentiment_score = 0.0
+
+                    # Find matching post to get post_id
+                    post_row = conn.execute(
+                        "SELECT id, kol_id FROM kol_posts WHERE platform='stocktwits' AND post_id = ?",
+                        [str(msg.get("id", ""))],
+                    ).fetchone()
+                    if not post_row:
+                        continue
+
+                    # Determine market from symbol mentions in the message
+                    market = "US"
+                    symbols_in_msg = [s["symbol"] for s in entities.get("symbols", [])]
+
+                    for sym in symbols_in_msg:
+                        mention = {
+                            "post_id": post_row[0],
+                            "kol_id": post_row[1],
+                            "stock_code": sym.upper(),
+                            "stock_name": "",
+                            "market": market,
+                            "mention_context": body[:100],
+                            "sentiment_score": sentiment_score,
+                            "sentiment_label": sentiment_label,
+                            "confidence": 0.8,
+                        }
+                        upsert_mentions_batch(conn, [mention])
+                        total_mentions += 1
+
+            # Process KOL candidates
+            for user_id, kc in kol_candidates.items():
+                if kc["followers"] < 100:
+                    continue
+
+                pc = kc["post_count"]
+                avg_likes = kc["total_likes"] / max(pc, 1)
+                posts_per_week = min(pc / max(30, 1) * 7, 50)
+
+                scores = compute_kol_score(
+                    followers=kc["followers"],
+                    max_followers=max(max_followers, kc["followers"]),
+                    avg_likes=avg_likes,
+                    avg_comments=0,
+                    avg_shares=0,
+                    posts_per_week=posts_per_week,
+                    account_age_days=kc["account_age_days"],
+                    stock_mention_ratio=0.8,  # StockTwits is inherently stock-focused
+                )
+                tier = assign_tier(scores["total_score"])
+                weight = compute_kol_weight(tier, "stocktwits")
+
+                kc.update({
+                    "avg_likes": avg_likes,
+                    "avg_comments": 0,
+                    "avg_shares": 0,
+                    "avg_views": 0,
+                    "posts_per_week": round(posts_per_week, 2),
+                    "stock_mention_ratio": 0.8,
+                    "total_score": scores["total_score"],
+                    "score_reach": scores["reach"],
+                    "score_engagement": scores["engagement"],
+                    "score_consistency": scores["consistency"],
+                    "score_relevance": scores["stock_relevance"],
+                    "score_impact": scores["impact"],
+                    "tier": tier,
+                    "base_weight": weight,
+                    "first_seen_date": TODAY,
+                    "last_active_date": TODAY,
+                    "is_active": 1,
+                })
+                kid = upsert_kol(conn, kc)
+                if kid:
+                    total_kols += 1
+                    conn.execute(
+                        "UPDATE kol_posts SET kol_id = ? WHERE platform = 'stocktwits' AND kol_id IS NULL",
+                        [kid],
+                    )
+
+            logger.info(f"  ${symbol}: {len(posts_data)} msgs, {len(kol_candidates)} users")
+            time.sleep(STOCKTWITS_RATE_LIMIT)
+
+        except Exception as e:
+            msg = f"StockTwits ${symbol}: {e}"
+            logger.error(msg)
+            errors.append(msg)
+
+    return {
+        "source": "stocktwits",
+        "status": "ok" if not errors else "partial",
+        "symbols_scanned": len(symbols),
+        "posts_fetched": total_posts,
+        "mentions_tagged": total_mentions,
+        "kols_discovered": total_kols,
+        "errors": errors,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════
+# Finnhub Fetcher
+# ═══════════════════════════════════════════════════════════════
+
+def fetch_finnhub(conn, news_limit: int = FINNHUB_NEWS_LIMIT,
+                  sentiment_limit: int = FINNHUB_SENTIMENT_LIMIT) -> Dict[str, Any]:
+    """Fetch market news + social sentiment from Finnhub.
+
+    News articles go through LLM tagging like other posts. Social sentiment
+    data (pre-computed Reddit/Twitter metrics) is stored directly as mentions.
+
+    Returns summary dict.
+    """
+    import requests as req
+
+    if not FINNHUB_API_KEY:
+        return {"source": "finnhub", "status": "skipped", "reason": "no API key configured"}
+
+    base = "https://finnhub.io/api/v1"
+    total_posts = 0
+    total_mentions = 0
+    errors = []
+
+    try:
+        # Step 1: Fetch general market news
+        logger.info("Finnhub: fetching market news...")
+        resp = req.get(
+            f"{base}/news",
+            params={"category": "general", "token": FINNHUB_API_KEY},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        articles = resp.json()[:news_limit]
+
+        posts_data = []
+        for art in articles:
+            posts_data.append({
+                "platform": "finnhub",
+                "post_id": str(art.get("id", "")),
+                "post_url": art.get("url", ""),
+                "title": art.get("headline", "")[:200],
+                "content": (art.get("summary", "") or "")[:600],
+                "posted_at": datetime.fromtimestamp(
+                    art.get("datetime", 0), tz=timezone.utc
+                ).strftime("%Y-%m-%d %H:%M:%S") if art.get("datetime") else "",
+                "fetched_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+                "likes": 0,
+                "comments": 0,
+                "shares": 0,
+                "views": 0,
+                "kol_id": None,
+            })
+
+        if posts_data:
+            count = upsert_posts_batch(conn, posts_data)
+            total_posts += count
+            logger.info(f"Finnhub: {count} news articles")
+
+        # Step 2: Fetch social sentiment for active symbols
+        logger.info("Finnhub: fetching social sentiment...")
+        active_symbols = conn.execute("""
+            SELECT DISTINCT stock_code FROM stock_mentions WHERE market = 'US'
+            UNION
+            SELECT 'AAPL' UNION SELECT 'TSLA' UNION SELECT 'MSFT' UNION SELECT 'NVDA'
+            UNION SELECT 'GOOGL' UNION SELECT 'AMZN' UNION SELECT 'META' UNION SELECT 'SPY'
+            UNION SELECT 'QQQ'
+        """).fetchall()
+        active_symbols = [r[0] for r in active_symbols][:sentiment_limit]
+
+        for sym in active_symbols:
+            try:
+                resp = req.get(
+                    f"{base}/stock/social-sentiment",
+                    params={"symbol": sym, "token": FINNHUB_API_KEY},
+                    timeout=30,
+                )
+                resp.raise_for_status()
+                sent_data = resp.json()
+
+                reddit_data = sent_data.get("reddit", [])
+                twitter_data = sent_data.get("twitter", [])
+
+                for entry in reddit_data[:5]:
+                    if entry.get("mention", 0) > 0:
+                        mention = {
+                            "post_id": None,  # no specific post, aggregated
+                            "kol_id": None,
+                            "stock_code": sym.upper(),
+                            "stock_name": "",
+                            "market": "US",
+                            "mention_context": f"Reddit: {entry.get('mention', 0)} mentions in 24h",
+                            "sentiment_score": entry.get("positiveScore", 0) / 100.0 - entry.get("negativeScore", 0) / 100.0,
+                            "sentiment_label": "positive" if entry.get("positiveScore", 0) > entry.get("negativeScore", 0) else "neutral",
+                            "confidence": 0.5,
+                        }
+                        upsert_mentions_batch(conn, [mention])
+                        total_mentions += 1
+
+                for entry in twitter_data[:5]:
+                    if entry.get("mention", 0) > 0:
+                        mention = {
+                            "post_id": None,
+                            "kol_id": None,
+                            "stock_code": sym.upper(),
+                            "stock_name": "",
+                            "market": "US",
+                            "mention_context": f"Twitter: {entry.get('mention', 0)} mentions in 24h",
+                            "sentiment_score": entry.get("positiveScore", 0) / 100.0 - entry.get("negativeScore", 0) / 100.0,
+                            "sentiment_label": "positive" if entry.get("positiveScore", 0) > entry.get("negativeScore", 0) else "neutral",
+                            "confidence": 0.4,
+                        }
+                        upsert_mentions_batch(conn, [mention])
+                        total_mentions += 1
+
+                time.sleep(0.15)
+
+            except Exception as e:
+                logger.error(f"Finnhub sentiment ${sym}: {e}")
+
+        logger.info(f"Finnhub: {total_mentions} social sentiment mentions processed")
+
+    except Exception as e:
+        msg = f"Finnhub fetch failed: {e}"
+        logger.error(msg)
+        errors.append(msg)
+
+    return {
+        "source": "finnhub",
+        "status": "ok" if not errors else "partial",
+        "posts_fetched": total_posts,
+        "sentiment_mentions": total_mentions,
+        "errors": errors,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════
 # Stock Mention Tagging
 # ═══════════════════════════════════════════════════════════════
 
@@ -592,7 +1334,8 @@ def fetch_daily(source: Optional[str] = None) -> Dict[str, Any]:
     """Daily fetch: posts → tag mentions → update ratings → compute thermometer.
 
     Args:
-        source: optionally run only one source ("reddit" or "youtube")
+        source: optionally run only one source ("reddit", "youtube", "stocktwits",
+                "finnhub", "twitter", "weibo", "seekingalpha", "moomoo")
     """
     conn = init_db()
     results = {}
@@ -615,6 +1358,60 @@ def fetch_daily(source: Optional[str] = None) -> Dict[str, Any]:
             results["youtube"] = result
             log_fetch_end(conn, log_id, items_checked=result.get("posts_fetched", 0),
                           new_items=result.get("kols_discovered", 0))
+            if result.get("errors"):
+                all_errors.extend(result["errors"])
+
+        if not source or source == "twitter":
+            log_id = log_fetch_start(conn, "twitter")
+            result = fetch_twitter(conn)
+            results["twitter"] = result
+            log_fetch_end(conn, log_id, items_checked=result.get("posts_fetched", 0),
+                          new_items=result.get("kols_discovered", 0))
+            if result.get("errors"):
+                all_errors.extend(result["errors"])
+
+        if not source or source == "weibo":
+            log_id = log_fetch_start(conn, "weibo")
+            result = fetch_weibo(conn)
+            results["weibo"] = result
+            log_fetch_end(conn, log_id, items_checked=result.get("posts_fetched", 0),
+                          new_items=result.get("kols_discovered", 0))
+            if result.get("errors"):
+                all_errors.extend(result["errors"])
+
+        if not source or source == "seekingalpha":
+            log_id = log_fetch_start(conn, "seekingalpha")
+            result = fetch_seekingalpha(conn)
+            results["seekingalpha"] = result
+            log_fetch_end(conn, log_id, items_checked=result.get("posts_fetched", 0),
+                          new_items=result.get("kols_discovered", 0))
+            if result.get("errors"):
+                all_errors.extend(result["errors"])
+
+        if not source or source == "moomoo":
+            log_id = log_fetch_start(conn, "moomoo")
+            result = fetch_moomoo(conn)
+            results["moomoo"] = result
+            log_fetch_end(conn, log_id, items_checked=result.get("posts_fetched", 0),
+                          new_items=result.get("kols_discovered", 0))
+            if result.get("errors"):
+                all_errors.extend(result["errors"])
+
+        if not source or source == "stocktwits":
+            log_id = log_fetch_start(conn, "stocktwits")
+            result = fetch_stocktwits(conn)
+            results["stocktwits"] = result
+            log_fetch_end(conn, log_id, items_checked=result.get("posts_fetched", 0),
+                          new_items=result.get("kols_discovered", 0))
+            if result.get("errors"):
+                all_errors.extend(result["errors"])
+
+        if not source or source == "finnhub":
+            log_id = log_fetch_start(conn, "finnhub")
+            result = fetch_finnhub(conn)
+            results["finnhub"] = result
+            log_fetch_end(conn, log_id, items_checked=result.get("posts_fetched", 0),
+                          new_items=0)
             if result.get("errors"):
                 all_errors.extend(result["errors"])
 
@@ -696,7 +1493,9 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="KOL Thermometer Pipeline")
     parser.add_argument("--init", action="store_true", help="Backfill mode (wider scan)")
-    parser.add_argument("--source", type=str, default=None, choices=["reddit", "youtube"],
+    parser.add_argument("--source", type=str, default=None,
+                        choices=["reddit", "youtube", "stocktwits", "finnhub",
+                                 "twitter", "weibo", "seekingalpha", "moomoo"],
                         help="Run a single source only")
     args = parser.parse_args()
 
