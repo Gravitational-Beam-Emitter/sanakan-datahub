@@ -2258,6 +2258,174 @@ def tool_data_sources() -> list[dict]:
         for key, meta in SOURCE_META.items()
     ]
 
+# ── A-Share ETF Tools ────────────────────────────────────────
+
+def _a_share_etf_conn():
+    """Get a read-only connection to the a_share_etf DuckDB."""
+    db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "a_share_etf.duckdb")
+    if not os.path.exists(db_path):
+        return None, "a_share_etf database not found"
+    return duckdb.connect(db_path, read_only=True), None
+
+
+def tool_a_share_etf_status() -> dict:
+    """Get A-share ETF flow database status."""
+    conn, err = _a_share_etf_conn()
+    if err:
+        return {"error": err}
+    try:
+        tables = {}
+        for tname in ["etf_daily", "sector_flow_daily", "margin_daily", "market_overview_daily"]:
+            cnt = conn.execute(f'SELECT COUNT(*) FROM "{tname}"').fetchone()[0]
+            tables[tname] = cnt
+        days = conn.execute("SELECT COUNT(DISTINCT date) FROM etf_daily").fetchone()[0]
+        return {"status": "ok", "trading_days": days, "tables": tables}
+    finally:
+        conn.close()
+
+
+def tool_a_share_etf_flows(date: str = "", sector: str = "", limit: int = 50) -> dict:
+    """Get A-share ETF sector flow data. Leave date empty for latest available. Leave sector empty for all sectors."""
+    conn, err = _a_share_etf_conn()
+    if err:
+        return {"error": err}
+    try:
+        if date and not sector:
+            df = conn.execute("""
+                SELECT date, sector, etf_count, total_inflow, total_amount, avg_inflow
+                FROM sector_flow_daily WHERE date = ?
+                ORDER BY total_inflow DESC
+            """, [date]).df()
+            return {"date": date, "count": len(df), "sectors": df.to_dict(orient="records")}
+        elif date and sector:
+            df = conn.execute("""
+                SELECT * FROM sector_flow_daily WHERE date = ? AND sector = ?
+            """, [date, sector]).df()
+            return {"date": date, "sector": sector, "data": df.to_dict(orient="records")}
+        elif sector and not date:
+            df = conn.execute("""
+                SELECT * FROM sector_flow_daily WHERE sector = ?
+                ORDER BY date DESC LIMIT ?
+            """, [sector, limit]).df()
+            return {"sector": sector, "count": len(df), "history": df.to_dict(orient="records")}
+        else:
+            # Latest date, all sectors
+            latest = conn.execute(
+                "SELECT date FROM sector_flow_daily ORDER BY date DESC LIMIT 1"
+            ).fetchone()
+            if not latest:
+                return {"error": "No data"}
+            date_str = str(latest[0])
+            df = conn.execute("""
+                SELECT date, sector, etf_count, total_inflow, total_amount, avg_inflow
+                FROM sector_flow_daily WHERE date = ?
+                ORDER BY total_inflow DESC
+            """, [date_str]).df()
+            return {"date": date_str, "count": len(df), "sectors": df.to_dict(orient="records")}
+    finally:
+        conn.close()
+
+
+def tool_a_share_etf_detail(code: str = "", date: str = "", limit: int = 30) -> dict:
+    """Get per-ETF detail: history for a specific ETF code, or all ETFs for a specific date."""
+    conn, err = _a_share_etf_conn()
+    if err:
+        return {"error": err}
+    try:
+        if code:
+            df = conn.execute("""
+                SELECT date, code, name, price, change_pct, volume, amount,
+                       main_inflow, main_inflow_pct, super_large_inflow,
+                       large_inflow, medium_inflow, small_inflow, sector
+                FROM etf_daily WHERE code = ?
+                ORDER BY date DESC LIMIT ?
+            """, [code, limit]).df()
+            return {"code": code, "count": len(df), "history": df.to_dict(orient="records")}
+        elif date:
+            df = conn.execute("""
+                SELECT date, code, name, price, change_pct, main_inflow,
+                       main_inflow_pct, super_large_inflow, sector
+                FROM etf_daily WHERE date = ?
+                ORDER BY main_inflow DESC
+            """, [date]).df()
+            return {"date": date, "count": len(df), "etfs": df.to_dict(orient="records")}
+        else:
+            latest = conn.execute(
+                "SELECT date FROM etf_daily ORDER BY date DESC LIMIT 1"
+            ).fetchone()
+            if not latest:
+                return {"error": "No data"}
+            date_str = str(latest[0])
+            df = conn.execute("""
+                SELECT date, code, name, price, change_pct, main_inflow,
+                       main_inflow_pct, super_large_inflow, sector
+                FROM etf_daily WHERE date = ?
+                ORDER BY main_inflow DESC
+                LIMIT 50
+            """, [date_str]).df()
+            return {"date": date_str, "count": len(df), "etfs": df.to_dict(orient="records")}
+    finally:
+        conn.close()
+
+
+def tool_a_share_margin(limit: int = 30) -> dict:
+    """Get latest A-share margin balance data (融资融券余额) with daily changes."""
+    conn, err = _a_share_etf_conn()
+    if err:
+        return {"error": err}
+    try:
+        df = conn.execute("""
+            SELECT date, sh_margin, sz_margin, total_margin, daily_change
+            FROM margin_daily ORDER BY date DESC LIMIT ?
+        """, [limit]).df()
+        if df.empty:
+            return {"error": "No margin data"}
+        latest = df.iloc[0].to_dict()
+        return {
+            "latest": latest,
+            "count": len(df),
+            "history": df.to_dict(orient="records"),
+        }
+    finally:
+        conn.close()
+
+
+def tool_a_share_etf_overview(date: str = "", limit: int = 30) -> dict:
+    """Get A-share ETF daily market overview with merged proxy (合并代理).
+    Merged proxy = ETF net inflow - margin_change (reflects ETF flows covering margin outflows).
+    Leave date empty for latest."""
+    conn, err = _a_share_etf_conn()
+    if err:
+        return {"error": err}
+    try:
+        if date:
+            row = conn.execute("""
+                SELECT * FROM market_overview_daily WHERE date = ?
+            """, [date]).fetchone()
+            if not row:
+                return {"error": f"No overview data for {date}"}
+            return {
+                "date": str(row[0]), "total_etf_inflow": row[1],
+                "total_etf_count": row[2], "margin_balance": row[3],
+                "margin_change": row[4], "merged_proxy": row[5],
+                "market_main_inflow": row[6],
+            }
+        else:
+            df = conn.execute("""
+                SELECT * FROM market_overview_daily ORDER BY date DESC LIMIT ?
+            """, [limit]).df()
+            if df.empty:
+                return {"error": "No overview data"}
+            latest = df.iloc[0].to_dict()
+            return {
+                "latest": latest,
+                "count": len(df),
+                "history": df.to_dict(orient="records"),
+            }
+    finally:
+        conn.close()
+
+
 TOOLS = [
     {
         "name": "list_indicators",
@@ -3101,6 +3269,60 @@ TOOLS = [
             },
         },
     },
+    # ── A-Share ETF ──
+    {
+        "name": "a_share_etf_status",
+        "description": "Get A-share ETF flow database status: available tables and row counts.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    {
+        "name": "a_share_etf_flows",
+        "description": "Get A-share ETF sector flow data. Returns per-sector aggregated net inflows, ETF counts, and total turnover. Leave date empty for latest available. Leave sector empty for all sectors. Use sector param with no date for sector history.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "date": {"type": "string", "description": "Date YYYY-MM-DD, empty for latest"},
+                "sector": {"type": "string", "description": "Sector name (e.g., 沪深300, 科创板, 信息技术, 医药). Empty for all."},
+                "limit": {"type": "integer", "description": "Max records for sector history (default 50)"},
+            },
+        },
+    },
+    {
+        "name": "a_share_etf_detail",
+        "description": "Get per-ETF daily detail: either price+flow history for a specific ETF code, or all ETFs for a specific date. Leave both empty for latest date's top 50 ETFs.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "code": {"type": "string", "description": "ETF code (e.g., 510050). Empty to query by date."},
+                "date": {"type": "string", "description": "Date YYYY-MM-DD. Used when code is empty."},
+                "limit": {"type": "integer", "description": "Max records for ETF history (default 30)"},
+            },
+        },
+    },
+    {
+        "name": "a_share_margin",
+        "description": "Get A-share margin balance (融资融券余额): Shanghai + Shenzhen combined, with daily change. Shows latest snapshot and recent history.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "description": "Max history records to return (default 30)"},
+            },
+        },
+    },
+    {
+        "name": "a_share_etf_overview",
+        "description": "Get A-share ETF daily market overview with merged proxy (合并代理). Merged proxy = total ETF net inflow - margin_change. Positive means net capital flowing into the A-share market. Leave date empty for latest.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "date": {"type": "string", "description": "Date YYYY-MM-DD, empty for latest"},
+                "limit": {"type": "integer", "description": "Max history records (default 30)"},
+            },
+        },
+    },
 ]
 
 TOOL_MAP = {
@@ -3193,6 +3415,12 @@ TOOL_MAP = {
     "kr_leverage_summary": tool_kr_leverage_summary,
     "kr_leverage_series": tool_kr_leverage_series,
     "kr_leverage_etf": tool_kr_leverage_etf,
+    # A-Share ETF
+    "a_share_etf_status": tool_a_share_etf_status,
+    "a_share_etf_flows": tool_a_share_etf_flows,
+    "a_share_etf_detail": tool_a_share_etf_detail,
+    "a_share_margin": tool_a_share_margin,
+    "a_share_etf_overview": tool_a_share_etf_overview,
 }
 
 

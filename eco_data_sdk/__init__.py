@@ -10,11 +10,12 @@ Services:
     AnnouncementsClient   — port 8005, multi-market company announcements
     KrStockClient         — port 8006, Korean stock market (KOSPI/KOSDAQ/KONEX)
     TwStockClient         — port 8007, Taiwan stock market (TWSE/TPEx)
+    AShareEtfClient       — port 8009, A-share ETF daily flows & margin
 
 Usage:
     from eco_data_sdk import EcoDataClient, CnStockClient, UsCorpActionsClient
     from eco_data_sdk import UsListingsClient, HkFundsClient, AnnouncementsClient
-    from eco_data_sdk import KrStockClient
+    from eco_data_sdk import KrStockClient, AShareEtfClient
 
     eco = EcoDataClient()
     indicators = eco.list_indicators(source="cn")
@@ -36,6 +37,9 @@ Usage:
 
     kr = KrStockClient()
     kospi = kr.list_listings(market="KOSPI")
+
+    etf = AShareEtfClient()
+    overview = etf.overview("2026-07-22")
 """
 
 from eco_data_sdk.client import EcoDataClient
@@ -46,6 +50,7 @@ from eco_data_sdk.hk_funds_client import HkFundsClient
 from eco_data_sdk.announcements_client import AnnouncementsClient
 from eco_data_sdk.kr_stock_client import KrStockClient
 from eco_data_sdk.tw_stock_client import TwStockClient
+from eco_data_sdk.a_share_etf_client import AShareEtfClient
 
 __all__ = [
     "EcoDataClient",
@@ -56,4 +61,5 @@ __all__ = [
     "AnnouncementsClient",
     "KrStockClient",
     "TwStockClient",
+    "AShareEtfClient",
 ]
