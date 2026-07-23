@@ -328,6 +328,94 @@ class NameScreeningHarness:
         logger.info(f"Loaded {count} OFAC SDN entries into name_screening")
         return count
 
+    def load_eu_into_screening(self) -> int:
+        """Import EU FSF sanctions from SanctionsHarness into name_screening table."""
+        from app.eco_harness.sanctions import SanctionsHarness
+
+        if not HAS_STORAGE:
+            return 0
+
+        sh = SanctionsHarness()
+        df = sh.eu_sanctions_list()
+        if df.empty:
+            logger.warning("EU FSF returned empty — cannot load into name_screening")
+            return 0
+
+        conn = init_db(self._db_path)
+        count = 0
+        for _, row in df.iterrows():
+            name = str(row.get("name", ""))
+            entry = {
+                "source": "eu_fsf",
+                "source_uid": str(row.get("uid", 0)),
+                "name_en": name,
+                "name_cn": "",
+                "name_cn_norm": "",
+                "name_pinyin": "",
+                "name_type": str(row.get("entity_type", "entity")).lower(),
+                "pep_level": "",
+                "risk_category": "sanctions",
+                "aliases": str(row.get("aliases", "")),
+                "programs": str(row.get("programs", "")),
+                "countries": str(row.get("countries", "")),
+                "addresses": str(row.get("addresses", "")),
+                "source_date": str(row.get("date", "")),
+                "notes": str(row.get("notes", "")),
+            }
+            try:
+                upsert_screening_entry(conn, entry)
+                count += 1
+            except Exception:
+                pass
+
+        conn.close()
+        logger.info(f"Loaded {count} EU FSF entries into name_screening")
+        return count
+
+    def load_un_into_screening(self) -> int:
+        """Import UN SC sanctions from SanctionsHarness into name_screening table."""
+        from app.eco_harness.sanctions import SanctionsHarness
+
+        if not HAS_STORAGE:
+            return 0
+
+        sh = SanctionsHarness()
+        df = sh.un_sanctions_list()
+        if df.empty:
+            logger.warning("UN SC returned empty — cannot load into name_screening")
+            return 0
+
+        conn = init_db(self._db_path)
+        count = 0
+        for _, row in df.iterrows():
+            name = str(row.get("name", ""))
+            entry = {
+                "source": "un_sc",
+                "source_uid": str(row.get("dataid", row.get("uid", 0))),
+                "name_en": name,
+                "name_cn": "",
+                "name_cn_norm": "",
+                "name_pinyin": "",
+                "name_type": str(row.get("entity_type", "entity")).lower(),
+                "pep_level": "",
+                "risk_category": "sanctions",
+                "aliases": str(row.get("aliases", "")),
+                "programs": str(row.get("sanctions_regime", "")),
+                "countries": str(row.get("countries", "")),
+                "addresses": str(row.get("addresses", "")),
+                "source_date": str(row.get("date", "")),
+                "notes": str(row.get("notes", "")),
+            }
+            try:
+                upsert_screening_entry(conn, entry)
+                count += 1
+            except Exception:
+                pass
+
+        conn.close()
+        logger.info(f"Loaded {count} UN SC entries into name_screening")
+        return count
+
     # ── OpenSanctions update check ─────────────────────────────
 
     def check_opensanctions_version(self) -> Optional[str]:

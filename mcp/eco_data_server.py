@@ -1993,7 +1993,7 @@ SOURCE_META = {
     "cb":  {"label": "A-Share Concept Boards",        "provider": "AKShare (东方财富概念板块)",       "key_required": False, "description": "A股概念板块指数: 光通信/CPO/算力/数据中心/液冷/AI芯片/存储芯片/光纤/玻璃基板/Chiplet/铜缆高速连接/F5G/MicroLED/光刻机/MLCC/东数西算等 (22个板块)", "category": "macro"},
     "optical": {"label": "Global Optical Companies",   "provider": "Yahoo Finance (yfinance)",         "key_required": False, "description": "全球光通信个股财报: 美股(COHR/LITE/FN/ANET/GLW/CIEN/AAOI/CLS/CRDO), 台股(台积电/联亚/光环/稳懋/联钧/上诠/众达/华星光/光圣), 日股(古河/住友/藤仓), 韩股(三星/SK海力士) — 季度营收与净利润", "category": "macro"},
     "aml":  {"label": "AML/CFT Country Risk Ratings", "provider": "FATF + US State Dept + Basel Institute", "key_required": False, "description": "反洗钱国家风险评级: FATF黑/灰名单(26国), 美国INCSR洗钱关注国(81国), Basel AML指数综合评分(65国)", "category": "country_risk"},
-    "sanctions": {"label": "Sanctions & Corruption", "provider": "OFAC + Transparency International", "key_required": False, "description": "制裁与腐败: OFAC SDN制裁名单(19,065实体/个人/船舶/飞行器), 按国家聚合制裁数量, TI腐败感知指数CPI(180国评分排名)", "category": "country_risk"},
+    "sanctions": {"label": "Sanctions & Corruption", "provider": "OFAC + EU FSF + UN SC + Transparency International", "key_required": False, "description": "制裁与腐败: OFAC SDN制裁名单(美国), EU FSF欧盟金融制裁(5,892条), UN SC联合国安理会制裁(1,010条), 按国家聚合制裁数量, TI腐败感知指数CPI(180国评分排名)", "category": "country_risk"},
     "name_screening": {"label": "Name Screening (中英文)", "provider": "OpenSanctions + GDELT + 阿里云法院", "key_required": False, "description": "名称筛查: OpenSanctions制裁+PEP数据库(440K+实体,含中文名), GDELT全球负面新闻, 阿里云信数科技中国法院涉诉(失信/被执行/裁判文书), 中英文模糊匹配+拼音跨文字搜索", "category": "name_screening"},
     "energy": {"label": "Energy / EIA",          "provider": "U.S. Energy Information Admin", "key_required": True,  "description": "WTI原油价格, Henry Hub天然气价格", "category": "macro"},
 }
@@ -2422,6 +2422,165 @@ def tool_a_share_etf_overview(date: str = "", limit: int = 30) -> dict:
                 "count": len(df),
                 "history": df.to_dict(orient="records"),
             }
+    finally:
+        conn.close()
+
+
+# ── KOL Thermometer Tools ────────────────────────────────────
+
+def _kol_thermometer_conn():
+    """Get a read-only connection to the kol_thermometer DuckDB."""
+    db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "kol_thermometer.duckdb")
+    if not os.path.exists(db_path):
+        return None, "kol_thermometer database not found"
+    return duckdb.connect(db_path, read_only=True), None
+
+
+def tool_kol_thermometer_status() -> dict:
+    """Get KOL Thermometer database status: active KOLs by platform and tier, mention counts."""
+    conn, err = _kol_thermometer_conn()
+    if err:
+        return {"error": err}
+    try:
+        kol_count = conn.execute("SELECT COUNT(*) FROM kols WHERE is_active = 1").fetchone()[0]
+        post_count = conn.execute("SELECT COUNT(*) FROM kol_posts").fetchone()[0]
+        mention_count = conn.execute("SELECT COUNT(*) FROM stock_mentions").fetchone()[0]
+        thermo_days = conn.execute("SELECT COUNT(DISTINCT date) FROM thermometer").fetchone()[0]
+        tier_dist = conn.execute("""
+            SELECT tier, COUNT(*) as cnt FROM kols WHERE is_active = 1
+            GROUP BY tier ORDER BY tier
+        """).df().to_dict(orient="records")
+        platform_dist = conn.execute("""
+            SELECT platform, COUNT(*) as cnt FROM kols WHERE is_active = 1
+            GROUP BY platform ORDER BY cnt DESC
+        """).df().to_dict(orient="records")
+        return {
+            "active_kols": int(kol_count),
+            "total_posts": int(post_count),
+            "total_mentions": int(mention_count),
+            "thermometer_days": int(thermo_days),
+            "tier_distribution": tier_dist,
+            "platform_distribution": platform_dist,
+        }
+    finally:
+        conn.close()
+
+
+def tool_kol_thermometer_hot(market: str = "", min_heat: float = 0, limit: int = 20) -> dict:
+    """Get top N hottest stocks by KOL discussion heat score. Filter by market (US, CN, HK) or minimum heat threshold."""
+    conn, err = _kol_thermometer_conn()
+    if err:
+        return {"error": err}
+    try:
+        conditions = ["date = (SELECT MAX(date) FROM thermometer)"]
+        params = []
+        if market:
+            conditions.append("market = ?")
+            params.append(market)
+        if min_heat > 0:
+            conditions.append("heat_score >= ?")
+            params.append(min_heat)
+        where = "WHERE " + " AND ".join(conditions)
+        df = conn.execute(f"""
+            SELECT date, stock_code, stock_name, market, mention_count,
+                   unique_kols, heat_score, sentiment_bias, momentum
+            FROM thermometer {where}
+            ORDER BY heat_score DESC LIMIT ?
+        """, params + [limit]).df()
+        if df.empty:
+            return {"error": "No thermometer data"}
+        return {"count": len(df), "stocks": df.to_dict(orient="records")}
+    finally:
+        conn.close()
+
+
+def tool_kol_thermometer_stock(stock_code: str, days: int = 14) -> dict:
+    """Get thermometer history and recent mentions for a specific stock. Shows heat trend, top KOLs discussing it, and sentiment bias over time."""
+    conn, err = _kol_thermometer_conn()
+    if err:
+        return {"error": err}
+    try:
+        thermo_df = conn.execute("""
+            SELECT * FROM thermometer WHERE stock_code = ?
+            ORDER BY date DESC LIMIT ?
+        """, [stock_code, days]).df()
+        if thermo_df.empty:
+            return {"error": f"No thermometer data for {stock_code}"}
+        mentions_df = conn.execute("""
+            SELECT m.stock_code, m.sentiment_score, m.sentiment_label, m.mention_context,
+                   p.title as post_title, p.posted_at, p.platform,
+                   k.username, k.display_name, k.tier
+            FROM stock_mentions m
+            JOIN kol_posts p ON m.post_id = p.id
+            JOIN kols k ON m.kol_id = k.id
+            WHERE m.stock_code = ?
+            ORDER BY p.posted_at DESC LIMIT 30
+        """, [stock_code]).df()
+        return {
+            "stock_code": stock_code,
+            "thermometer_history": thermo_df.to_dict(orient="records"),
+            "recent_mentions": mentions_df.to_dict(orient="records"),
+        }
+    finally:
+        conn.close()
+
+
+def tool_kol_list(platform: str = "", tier: str = "", limit: int = 50) -> dict:
+    """List tracked KOLs (key opinion leaders). Filter by platform (reddit, youtube, guba, xueqiu) or tier (S, A, B, C, D)."""
+    conn, err = _kol_thermometer_conn()
+    if err:
+        return {"error": err}
+    try:
+        conditions = ["is_active = 1"]
+        params = []
+        if platform:
+            conditions.append("platform = ?")
+            params.append(platform)
+        if tier:
+            conditions.append("tier = ?")
+            params.append(tier)
+        where = "WHERE " + " AND ".join(conditions)
+        df = conn.execute(f"""
+            SELECT id, platform, username, display_name, followers, tier,
+                   total_score, base_weight, posts_per_week, last_post_date
+            FROM kols {where}
+            ORDER BY total_score DESC LIMIT ?
+        """, params + [limit]).df()
+        if df.empty:
+            return {"error": "No KOLs found"}
+        return {"count": len(df), "kols": df.to_dict(orient="records")}
+    finally:
+        conn.close()
+
+
+def tool_kol_thermometer_momentum(market: str = "", limit: int = 15) -> dict:
+    """Get stocks with biggest heat momentum change — rising stars (heating up) and falling stars (cooling down)."""
+    conn, err = _kol_thermometer_conn()
+    if err:
+        return {"error": err}
+    try:
+        conditions = ["date = (SELECT MAX(date) FROM thermometer)"]
+        params = []
+        if market:
+            conditions.append("market = ?")
+            params.append(market)
+        where = "WHERE " + " AND ".join(conditions)
+        # Rising (biggest positive momentum)
+        rising = conn.execute(f"""
+            SELECT date, stock_code, stock_name, market, heat_score, momentum, mention_count
+            FROM thermometer {where} AND momentum > 0
+            ORDER BY momentum DESC LIMIT ?
+        """, params + [limit]).df()
+        # Falling (biggest negative momentum)
+        falling = conn.execute(f"""
+            SELECT date, stock_code, stock_name, market, heat_score, momentum, mention_count
+            FROM thermometer {where} AND momentum < 0
+            ORDER BY momentum ASC LIMIT ?
+        """, params + [limit]).df()
+        return {
+            "rising": rising.to_dict(orient="records"),
+            "falling": falling.to_dict(orient="records"),
+        }
     finally:
         conn.close()
 
@@ -3323,6 +3482,62 @@ TOOLS = [
             },
         },
     },
+    # ── KOL Thermometer ──
+    {
+        "name": "kol_thermometer_status",
+        "description": "Get KOL Thermometer (市场温度计) database status: active KOLs by platform and tier, total posts/mentions, thermometer days covered.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    {
+        "name": "kol_thermometer_hot",
+        "description": "Get top N hottest stocks by KOL discussion heat score (0-100). Tracks which stocks are being discussed/pumped by key opinion leaders across Reddit, YouTube, and Chinese platforms. Filter by market (US, CN, HK) or minimum heat threshold.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "market": {"type": "string", "description": "Market filter: US, CN, or HK. Empty for all markets."},
+                "min_heat": {"type": "number", "description": "Minimum heat score threshold (0-100). Default 0 shows all."},
+                "limit": {"type": "integer", "description": "Max stocks to return (default 20)"},
+            },
+        },
+    },
+    {
+        "name": "kol_thermometer_stock",
+        "description": "Get detailed KOL thermometer data for a specific stock: heat trend history, recent mentions with sentiment, and which KOLs are discussing it.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "stock_code": {"type": "string", "description": "Stock ticker or code (e.g., AAPL, TSLA, 000768)"},
+                "days": {"type": "integer", "description": "Days of history to return (default 14)"},
+            },
+            "required": ["stock_code"],
+        },
+    },
+    {
+        "name": "kol_list",
+        "description": "List tracked KOLs (key opinion leaders / 大V) with their platform, follower count, tier (S/A/B/C/D), composite score, and posting frequency. Filter by platform or tier.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "platform": {"type": "string", "description": "Platform filter: reddit, youtube, guba, or xueqiu. Empty for all."},
+                "tier": {"type": "string", "description": "Tier filter: S, A, B, C, or D. Empty for all."},
+                "limit": {"type": "integer", "description": "Max KOLs to return (default 50)"},
+            },
+        },
+    },
+    {
+        "name": "kol_thermometer_momentum",
+        "description": "Get stocks with the biggest heat momentum changes — rising stars (rapidly heating up in KOL discussions) and falling stars (cooling down). Useful for spotting emerging pump targets or fading hype.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "market": {"type": "string", "description": "Market filter: US, CN, or HK. Empty for all."},
+                "limit": {"type": "integer", "description": "Max stocks per direction (default 15)"},
+            },
+        },
+    },
 ]
 
 TOOL_MAP = {
@@ -3421,6 +3636,12 @@ TOOL_MAP = {
     "a_share_etf_detail": tool_a_share_etf_detail,
     "a_share_margin": tool_a_share_margin,
     "a_share_etf_overview": tool_a_share_etf_overview,
+    # KOL Thermometer
+    "kol_thermometer_status": tool_kol_thermometer_status,
+    "kol_thermometer_hot": tool_kol_thermometer_hot,
+    "kol_thermometer_stock": tool_kol_thermometer_stock,
+    "kol_list": tool_kol_list,
+    "kol_thermometer_momentum": tool_kol_thermometer_momentum,
 }
 
 

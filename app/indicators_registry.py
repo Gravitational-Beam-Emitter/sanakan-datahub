@@ -1691,6 +1691,144 @@ def _generate_sanctions_indicators():
 
 INDICATORS.extend(_generate_sanctions_indicators())
 
+
+# ── EU FSF Sanctions (via OpenSanctions DB) ─────────────────────
+
+def _generate_eu_sanctions_indicators():
+    """Generate indicator entries for EU FSF consolidated financial sanctions."""
+    entries = []
+
+    _eu_countries = [
+        # G20 + FATF + financial centers (same list as OFAC)
+        "Argentina", "Australia", "Brazil", "Canada", "China", "France",
+        "Germany", "India", "Indonesia", "Italy", "Japan", "Mexico",
+        "Netherlands", "Russia", "Saudi Arabia", "South Africa",
+        "South Korea", "Türkiye", "United Kingdom", "United States",
+        "Algeria", "Angola", "Bolivia", "Bulgaria", "Cameroon",
+        "Ivory Coast", "Democratic Republic of the Congo", "Haiti", "Kenya",
+        "Kuwait", "Laos", "Lebanon", "Monaco", "Namibia", "Nepal",
+        "Papua New Guinea", "Senegal", "South Sudan", "Syria", "Venezuela",
+        "Vietnam", "British Virgin Islands", "Yemen",
+        "Iran", "North Korea", "Myanmar",
+        "Hong Kong", "Switzerland", "Singapore", "Panama", "Cayman Islands",
+        "United Arab Emirates", "Malta", "Cyprus", "Liechtenstein",
+        "Luxembourg", "Ireland", "Bahamas", "Bermuda", "Isle of Man",
+        "Jersey", "Guernsey", "Gibraltar",
+        "Spain", "Sweden", "Norway", "Denmark", "Finland", "Belgium",
+        "Austria", "Poland", "Czech Republic", "Greece", "Portugal",
+        "Israel", "Egypt", "Nigeria", "Pakistan", "Bangladesh",
+        "Philippines", "Thailand", "Malaysia", "Ukraine", "Belarus",
+        "Cuba", "Sudan", "Somalia", "Afghanistan", "Iraq", "Libya",
+        "Zimbabwe", "Uzbekistan", "Kazakhstan", "Azerbaijan",
+        "Taiwan", "Macau",
+        # EU-specific additions (EU sanction targets)
+        "Croatia", "Serbia", "Bosnia and Herzegovina", "Montenegro",
+        "Moldova", "Georgia", "Armenia", "Tajikistan", "Turkmenistan",
+        "Kyrgyzstan", "Ethiopia", "Eritrea", "Mali", "Niger",
+        "Burkina Faso", "Guinea", "Guinea-Bissau", "Liberia",
+        "Central African Republic", "Chad", "Burundi", "Rwanda",
+        "Uganda", "Tunisia", "Morocco", "Sri Lanka",
+    ]
+    for c in _eu_countries:
+        entries.append({
+            "source": "sanctions", "name": f"EU Sanctions — {c}",
+            "method": "eu_country_sanctions",
+            "params": {"country": c},
+            "description": f"EU欧盟金融制裁·{c}·按国家聚合被制裁实体/个人数量·每日更新·EU FSF",
+            "frequency": "daily",
+            "tags": "AML风险,金融合规,制裁,EU",
+        })
+
+    # EU total counts
+    entries.append({
+        "source": "sanctions", "name": "EU FSF Total Sanctions",
+        "method": "eu_total_counts", "params": {},
+        "description": "EU欧盟金融制裁总计·实体+个人总数量·每日更新·EU FSF Consolidated List",
+        "frequency": "daily",
+        "tags": "AML风险,金融合规,制裁,EU",
+    })
+
+    # EU sanctions by country (all countries aggregate)
+    entries.append({
+        "source": "sanctions", "name": "EU Sanctions by Country",
+        "method": "eu_sanctions_by_country", "params": {},
+        "description": "EU欧盟金融制裁按国家聚合·所有国家被制裁实体/个人分布·每日更新·EU FSF",
+        "frequency": "daily",
+        "tags": "AML风险,金融合规,制裁,EU",
+    })
+
+    return entries
+
+
+INDICATORS.extend(_generate_eu_sanctions_indicators())
+
+
+# ── UN SC Sanctions ──────────────────────────────────────────────
+
+def _generate_un_sanctions_indicators():
+    """Generate indicator entries for UN Security Council consolidated sanctions."""
+    entries = []
+
+    _un_countries = [
+        # G20 + FATF + financial centers
+        "Argentina", "Australia", "Brazil", "Canada", "China", "France",
+        "Germany", "India", "Indonesia", "Italy", "Japan", "Mexico",
+        "Netherlands", "Russia", "Saudi Arabia", "South Africa",
+        "South Korea", "Türkiye", "United Kingdom", "United States",
+        "Algeria", "Angola", "Bolivia", "Bulgaria", "Cameroon",
+        "Ivory Coast", "Democratic Republic of the Congo", "Haiti", "Kenya",
+        "Kuwait", "Laos", "Lebanon", "Monaco", "Namibia", "Nepal",
+        "Papua New Guinea", "Senegal", "South Sudan", "Syria", "Venezuela",
+        "Vietnam", "British Virgin Islands", "Yemen",
+        "Iran", "North Korea", "Myanmar",
+        "Hong Kong", "Switzerland", "Singapore", "Panama", "Cayman Islands",
+        "United Arab Emirates", "Malta", "Cyprus", "Liechtenstein",
+        "Luxembourg", "Ireland", "Bahamas", "Bermuda", "Isle of Man",
+        "Jersey", "Guernsey", "Gibraltar",
+        "Spain", "Sweden", "Norway", "Denmark", "Finland", "Belgium",
+        "Austria", "Poland", "Czech Republic", "Greece", "Portugal",
+        "Israel", "Egypt", "Nigeria", "Pakistan", "Bangladesh",
+        "Philippines", "Thailand", "Malaysia", "Ukraine", "Belarus",
+        "Cuba", "Sudan", "Somalia", "Afghanistan", "Iraq", "Libya",
+        "Zimbabwe", "Uzbekistan", "Kazakhstan", "Azerbaijan",
+        "Taiwan", "Macau",
+        # UN-specific (countries with active UN sanctions regimes)
+        "Somalia", "Yemen", "Mali", "South Sudan", "Sudan",
+        "Central African Republic", "Haiti", "Guinea-Bissau",
+    ]
+    for c in _un_countries:
+        entries.append({
+            "source": "sanctions", "name": f"UN Sanctions — {c}",
+            "method": "un_country_sanctions",
+            "params": {"country": c},
+            "description": f"UN联合国安理会制裁·{c}·按国家聚合被制裁个人/实体数量·每日更新·UN SC Consolidated List",
+            "frequency": "daily",
+            "tags": "AML风险,金融合规,制裁,UN",
+        })
+
+    # UN total counts
+    entries.append({
+        "source": "sanctions", "name": "UN SC Total Sanctions",
+        "method": "un_total_counts", "params": {},
+        "description": "UN联合国安理会制裁总计·个人+实体总数量+制裁制度数·每日更新·UN SC Consolidated List",
+        "frequency": "daily",
+        "tags": "AML风险,金融合规,制裁,UN",
+    })
+
+    # UN sanctions by country (all countries aggregate)
+    entries.append({
+        "source": "sanctions", "name": "UN Sanctions by Country",
+        "method": "un_sanctions_by_country", "params": {},
+        "description": "UN联合国安理会制裁按国家聚合·所有国家被制裁个人/实体分布·每日更新·UN SC Consolidated List",
+        "frequency": "daily",
+        "tags": "AML风险,金融合规,制裁,UN",
+    })
+
+    return entries
+
+
+INDICATORS.extend(_generate_un_sanctions_indicators())
+
 # Indicators that require API keys — skipped if key not configured
 _REQUIRES_FRED_KEY = {
     "us.gdp", "us.cpi", "us.core_cpi", "us.unemployment", "us.nonfarm", "us.fed_funds", "us.treasury_10y", "us.treasury_2y",

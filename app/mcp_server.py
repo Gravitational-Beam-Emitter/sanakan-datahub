@@ -42,7 +42,7 @@ SOURCE_META = {
     "ai_co": {"label": "AI Company Financials",       "provider": "Yahoo Finance (yfinance)",         "key_required": False, "description": "AI供应链企业财报: NVIDIA/TSMC/ASML/Broadcom营收利润, 微软/亚马逊/谷歌/Meta营收及CapEx, 四大云厂商合计AI基础设施投资", "category": "macro"},
     "cb":  {"label": "A-Share Concept Boards",        "provider": "AKShare (东方财富概念板块)",       "key_required": False, "description": "A股概念板块指数: 光通信/CPO/算力/数据中心/液冷/AI芯片/存储芯片/国产芯片/汽车芯片/半导体/小金属/磷化工/PCB (13个板块)", "category": "macro"},
     "aml":  {"label": "AML/CFT Country Risk Ratings", "provider": "FATF + US State Dept + Basel Institute", "key_required": False, "description": "反洗钱国家风险评级: FATF黑/灰名单(26国), 美国INCSR洗钱关注国(81国), Basel AML指数综合评分(65国)", "category": "country_risk"},
-    "sanctions": {"label": "Sanctions & Corruption", "provider": "OFAC + Transparency International", "key_required": False, "description": "制裁与腐败: OFAC SDN制裁名单(19,065实体/个人/船舶/飞行器), 按国家聚合制裁数量, TI腐败感知指数CPI(180国评分排名)", "category": "country_risk"},
+    "sanctions": {"label": "Sanctions & Corruption", "provider": "OFAC + EU FSF + UN SC + Transparency International", "key_required": False, "description": "制裁与腐败: OFAC SDN制裁名单(美国), EU FSF欧盟金融制裁(5,892条), UN SC联合国安理会制裁(1,010条), 按国家聚合制裁数量, TI腐败感知指数CPI(180国评分排名)", "category": "country_risk"},
     "name_screening": {"label": "Name Screening (中英文)", "provider": "OpenSanctions + GDELT + 阿里云法院", "key_required": False, "description": "名称筛查: OpenSanctions制裁+PEP数据库(440K+实体,含中文名), GDELT全球负面新闻, 阿里云信数科技中国法院涉诉(失信/被执行/裁判文书), 中英文模糊匹配+拼音跨文字搜索", "category": "name_screening"},
     "energy": {"label": "Energy / EIA",          "provider": "U.S. Energy Information Admin", "key_required": True,  "description": "WTI原油价格, Henry Hub天然气价格", "category": "macro"},
 }
