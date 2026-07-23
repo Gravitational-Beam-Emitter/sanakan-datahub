@@ -31,6 +31,7 @@ from a_share_etf.storage import (
     get_etf_history,
     get_sectors_by_date,
     get_sector_history,
+    get_sectors_history,
     get_margin_by_date,
     get_margin_history,
     get_overview_by_date,
@@ -123,6 +124,21 @@ def etf_history(code: str, limit: int = Query(default=60, le=200)):
 def sector_list():
     """List all sector labels."""
     return {"sectors": list_sectors()}
+
+
+@app.get("/api/v1/sectors/history")
+def sectors_history(limit: int = Query(default=60, le=200)):
+    """Sector flow history for all sectors across last N dates (for stacked chart)."""
+    conn = init_db(read_only=True)
+    try:
+        df = get_sectors_history(conn, limit=limit)
+        if df.empty:
+            return {"dates": [], "sectors": [], "rows": []}
+        # Convert date column to string for JSON
+        df["date"] = df["date"].astype(str).str[:10]
+        return {"count": len(df), "rows": _clean_records(df.to_dict(orient="records"))}
+    finally:
+        conn.close()
 
 
 @app.get("/api/v1/sectors/{date}")

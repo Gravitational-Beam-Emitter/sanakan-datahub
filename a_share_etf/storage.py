@@ -227,6 +227,19 @@ def get_sector_history(conn: duckdb.DuckDBPyConnection, sector: str, limit: int 
     """, [sector, limit]).df()
 
 
+def get_sectors_history(conn: duckdb.DuckDBPyConnection, limit: int = 60) -> pd.DataFrame:
+    """Get sector flows for the last N dates (for stacked history chart)."""
+    return conn.execute("""
+        SELECT date, sector, total_inflow, total_amount, etf_count, avg_inflow
+        FROM sector_flow_daily
+        WHERE date IN (
+            SELECT DISTINCT date FROM sector_flow_daily
+            ORDER BY date DESC LIMIT ?
+        )
+        ORDER BY date ASC, total_inflow DESC
+    """, [limit]).df()
+
+
 # ── Margin Balance ────────────────────────────────────────────
 
 def upsert_margin(conn: duckdb.DuckDBPyConnection, date: str, sh_margin: float,
