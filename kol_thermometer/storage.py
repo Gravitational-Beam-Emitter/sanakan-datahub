@@ -117,6 +117,8 @@ def init_db(db_path: Optional[str] = None, read_only: bool = False) -> duckdb.Du
             heat_score REAL DEFAULT 0,
             raw_heat REAL DEFAULT 0,
             sentiment_bias REAL DEFAULT 0,
+            positive_count INTEGER DEFAULT 0,
+            negative_count INTEGER DEFAULT 0,
             momentum REAL DEFAULT 0,
             top_kols TEXT,
             UNIQUE(date, stock_code)
@@ -147,6 +149,13 @@ def init_db(db_path: Optional[str] = None, read_only: bool = False) -> duckdb.Du
     conn.execute("CREATE INDEX IF NOT EXISTS idx_mentions_post ON stock_mentions(post_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_thermo_stock ON thermometer(stock_code)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_thermo_date ON thermometer(date)")
+
+    # Migration: add sentiment breakdown columns to existing tables
+    for col in ["positive_count", "negative_count"]:
+        try:
+            conn.execute(f"ALTER TABLE thermometer ADD COLUMN {col} INTEGER DEFAULT 0")
+        except Exception:
+            pass  # column already exists
 
     return conn
 
@@ -270,7 +279,7 @@ def deactivate_inactive_kols(conn: duckdb.DuckDBPyConnection) -> int:
     row = conn.execute("""
         UPDATE kols SET is_active = 0
         WHERE is_active = 1
-          AND last_active_date < CURRENT_DATE - INTERVAL '90 days'
+          AND CAST(last_active_date AS DATE) < CURRENT_DATE - INTERVAL '90 days'
     """).fetchone()
     return row[0] if row else 0
 
@@ -492,7 +501,8 @@ def upsert_thermometer(conn: duckdb.DuckDBPyConnection, records: List[Dict[str, 
 
     df = pd.DataFrame(records)
     needed = ["date", "stock_code", "stock_name", "market", "mention_count",
-              "unique_kols", "heat_score", "raw_heat", "sentiment_bias", "momentum", "top_kols"]
+              "unique_kols", "heat_score", "raw_heat", "sentiment_bias",
+              "positive_count", "negative_count", "momentum", "top_kols"]
     for col in needed:
         if col not in df.columns:
             df[col] = None
@@ -502,9 +512,10 @@ def upsert_thermometer(conn: duckdb.DuckDBPyConnection, records: List[Dict[str, 
     rows = conn.execute("""
         INSERT INTO thermometer (date, stock_code, stock_name, market, mention_count,
                                  unique_kols, heat_score, raw_heat, sentiment_bias,
-                                 momentum, top_kols)
+                                 positive_count, negative_count, momentum, top_kols)
         SELECT date, stock_code, stock_name, market, mention_count,
-               unique_kols, heat_score, raw_heat, sentiment_bias, momentum, top_kols
+               unique_kols, heat_score, raw_heat, sentiment_bias,
+               positive_count, negative_count, momentum, top_kols
         FROM _tmp_thermo
         ON CONFLICT (date, stock_code) DO UPDATE SET
             mention_count = excluded.mention_count,
@@ -512,6 +523,8 @@ def upsert_thermometer(conn: duckdb.DuckDBPyConnection, records: List[Dict[str, 
             heat_score = excluded.heat_score,
             raw_heat = excluded.raw_heat,
             sentiment_bias = excluded.sentiment_bias,
+            positive_count = excluded.positive_count,
+            negative_count = excluded.negative_count,
             momentum = excluded.momentum,
             top_kols = excluded.top_kols
     """).fetchall()

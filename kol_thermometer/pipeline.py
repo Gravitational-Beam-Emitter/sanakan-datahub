@@ -1436,6 +1436,8 @@ def compute_daily_thermometer(conn) -> int:
             "heat_score": heat["heat_score"],
             "raw_heat": heat["raw_heat"],
             "sentiment_bias": heat["sentiment_bias"],
+            "positive_count": heat["positive_count"],
+            "negative_count": heat["negative_count"],
             "momentum": momentum,
             "top_kols": top_kols_json,
         })
