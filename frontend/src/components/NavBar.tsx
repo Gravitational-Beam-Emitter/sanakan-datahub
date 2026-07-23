@@ -17,6 +17,7 @@ const TABS = [
   { href: "/industry-chain", label: "产业链" },
   { href: "/hynix", label: "海力士" },
   { href: "/thermometer", label: "温度计" },
+  { href: "/money-flow", label: "资金流" },
 ];
 
 export default function NavBar() {

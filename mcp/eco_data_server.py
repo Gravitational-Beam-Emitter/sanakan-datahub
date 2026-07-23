@@ -2585,6 +2585,171 @@ def tool_kol_thermometer_momentum(market: str = "", limit: int = 15) -> dict:
         conn.close()
 
 
+# ── A-Share Money Flow Tools ─────────────────────────────────
+
+def _a_share_money_flow_conn():
+    """Get a read-only connection to the a_share_money_flow DuckDB."""
+    db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "a_share_money_flow.duckdb")
+    if not os.path.exists(db_path):
+        return None, "a_share_money_flow database not found"
+    return duckdb.connect(db_path, read_only=True), None
+
+
+def tool_a_share_auction_rankings(min_gap: float = 0, min_score: float = 0, limit: int = 30) -> dict:
+    """Get A-share pre-market auction rush rankings (盘前竞价抢筹排行). Shows stocks with the highest rush scores — composite of auction gap %, turnover, and volume percentile. Filter by minimum gap % or rush score."""
+    conn, err = _a_share_money_flow_conn()
+    if err:
+        return {"error": err}
+    try:
+        conditions = ["date = (SELECT MAX(date) FROM auction_stock_daily)"]
+        params = []
+        if min_gap > 0:
+            conditions.append("gap_pct >= ?")
+            params.append(min_gap)
+        if min_score > 0:
+            conditions.append("rush_score >= ?")
+            params.append(min_score)
+        where = "WHERE " + " AND ".join(conditions)
+        df = conn.execute(f"""
+            SELECT code, name, gap_pct, volume, amount, turnover, rush_score
+            FROM auction_stock_daily {where}
+            ORDER BY rush_score DESC LIMIT ?
+        """, params + [limit]).df()
+        if df.empty:
+            return {"error": "No auction data"}
+        # Top sectors
+        sec_df = conn.execute("""
+            SELECT sector, avg_rush_score, max_rush_score, stock_count, rush_stocks_count, total_auction_amount
+            FROM auction_sector_daily
+            WHERE date = (SELECT MAX(date) FROM auction_sector_daily)
+            ORDER BY avg_rush_score DESC LIMIT 10
+        """).df()
+        return {
+            "stocks": df.to_dict(orient="records"),
+            "top_sectors": sec_df.to_dict(orient="records"),
+        }
+    finally:
+        conn.close()
+
+
+def tool_a_share_fund_flow_stocks(direction: str = "inflow", limit: int = 30) -> dict:
+    """Get A-share individual stock fund flow rankings (个股资金流向排行). direction: inflow (主力净流入最多) or outflow (主力净流出最多). Shows main/super_large/large/medium/small inflow breakdown."""
+    conn, err = _a_share_money_flow_conn()
+    if err:
+        return {"error": err}
+    try:
+        order = "main_inflow DESC" if direction == "inflow" else "main_inflow ASC"
+        where_clause = "main_inflow > 0" if direction == "inflow" else "main_inflow < 0"
+        df = conn.execute(f"""
+            SELECT code, name, latest_price, change_pct,
+                   main_inflow, main_inflow_pct,
+                   super_large_inflow, large_inflow,
+                   medium_inflow, small_inflow
+            FROM fund_flow_stock_daily
+            WHERE date = (SELECT MAX(date) FROM fund_flow_stock_daily)
+            AND {where_clause}
+            ORDER BY {order} LIMIT ?
+        """, [limit]).df()
+        if df.empty:
+            return {"error": "No fund flow stock data"}
+        # Convert amounts to 亿
+        for col in ["main_inflow", "super_large_inflow", "large_inflow", "medium_inflow", "small_inflow"]:
+            if col in df.columns:
+                df[f"{col}_yi"] = (df[col] / 1e8).round(2)
+        return {
+            "direction": direction,
+            "count": len(df),
+            "stocks": df.to_dict(orient="records"),
+        }
+    finally:
+        conn.close()
+
+
+def tool_a_share_fund_flow_sectors(sector_type: str = "行业资金流", direction: str = "inflow", limit: int = 20) -> dict:
+    """Get A-share sector fund flow rankings (板块资金流向排行). sector_type: 行业资金流 (industry) or 概念资金流 (concept). direction: inflow or outflow."""
+    conn, err = _a_share_money_flow_conn()
+    if err:
+        return {"error": err}
+    try:
+        order = "main_inflow DESC" if direction == "inflow" else "main_inflow ASC"
+        where_clause = "main_inflow > 0" if direction == "inflow" else "main_inflow < 0"
+        df = conn.execute(f"""
+            SELECT sector_name, change_pct,
+                   main_inflow, main_inflow_pct,
+                   super_large_inflow, large_inflow,
+                   medium_inflow, small_inflow, top_stock
+            FROM fund_flow_sector_daily
+            WHERE date = (SELECT MAX(date) FROM fund_flow_sector_daily)
+            AND sector_type = ? AND {where_clause}
+            ORDER BY {order} LIMIT ?
+        """, [sector_type, limit]).df()
+        if df.empty:
+            return {"error": f"No fund flow sector data for {sector_type}"}
+        for col in ["main_inflow", "super_large_inflow", "large_inflow", "medium_inflow", "small_inflow"]:
+            if col in df.columns:
+                df[f"{col}_yi"] = (df[col] / 1e8).round(2)
+        return {
+            "sector_type": sector_type,
+            "direction": direction,
+            "count": len(df),
+            "sectors": df.to_dict(orient="records"),
+        }
+    finally:
+        conn.close()
+
+
+def tool_a_share_money_flow_status() -> dict:
+    """Get A-share Money Flow database status: auction days, fund flow days, record counts."""
+    conn, err = _a_share_money_flow_conn()
+    if err:
+        return {"error": err}
+    try:
+        auc_days = conn.execute("SELECT COUNT(DISTINCT date) FROM auction_stock_daily").fetchone()[0]
+        auc_records = conn.execute("SELECT COUNT(*) FROM auction_stock_daily").fetchone()[0]
+        ff_days = conn.execute("SELECT COUNT(DISTINCT date) FROM fund_flow_stock_daily").fetchone()[0]
+        ff_records = conn.execute("SELECT COUNT(*) FROM fund_flow_stock_daily").fetchone()[0]
+        ff_sec_records = conn.execute("SELECT COUNT(*) FROM fund_flow_sector_daily").fetchone()[0]
+        latest_auc = conn.execute("SELECT MAX(date) FROM auction_stock_daily").fetchone()[0]
+        latest_ff = conn.execute("SELECT MAX(date) FROM fund_flow_stock_daily").fetchone()[0]
+        return {
+            "auction_days": int(auc_days),
+            "auction_records": int(auc_records),
+            "latest_auction_date": str(latest_auc) if latest_auc else None,
+            "fund_flow_days": int(ff_days),
+            "fund_flow_stock_records": int(ff_records),
+            "fund_flow_sector_records": int(ff_sec_records),
+            "latest_fund_flow_date": str(latest_ff) if latest_ff else None,
+        }
+    finally:
+        conn.close()
+
+
+def tool_a_share_money_flow_detail(code: str, days: int = 14) -> dict:
+    """Get auction history + fund flow history for a specific A-share stock. code: 6-digit stock code (e.g., 000768)."""
+    conn, err = _a_share_money_flow_conn()
+    if err:
+        return {"error": err}
+    try:
+        auc_df = conn.execute("""
+            SELECT date, gap_pct, volume, amount, turnover, rush_score
+            FROM auction_stock_daily WHERE code = ?
+            ORDER BY date DESC LIMIT ?
+        """, [code, days]).df()
+        ff_df = conn.execute("""
+            SELECT date, main_inflow, main_inflow_pct, super_large_inflow,
+                   large_inflow, medium_inflow, small_inflow, change_pct
+            FROM fund_flow_stock_daily WHERE code = ?
+            ORDER BY date DESC LIMIT ?
+        """, [code, days]).df()
+        return {
+            "code": code,
+            "auction_history": auc_df.to_dict(orient="records"),
+            "fund_flow_history": ff_df.to_dict(orient="records"),
+        }
+    finally:
+        conn.close()
+
+
 TOOLS = [
     {
         "name": "list_indicators",
@@ -3538,6 +3703,62 @@ TOOLS = [
             },
         },
     },
+    # ── A-Share Money Flow ──
+    {
+        "name": "a_share_money_flow_status",
+        "description": "Get A-share Money Flow (A股资金流向+竞价抢筹) database status: auction days, fund flow days, record counts.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    {
+        "name": "a_share_auction_rankings",
+        "description": "Get A-share pre-market auction rush rankings (盘前竞价抢筹排行). Shows stocks with highest composite rush scores based on auction gap %, turnover rate, and volume percentile. Also returns top rush sectors. Filter by minimum gap % or rush score.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "min_gap": {"type": "number", "description": "Minimum auction gap % (default 0 shows all)"},
+                "min_score": {"type": "number", "description": "Minimum rush score (default 0)"},
+                "limit": {"type": "integer", "description": "Max stocks to return (default 30)"},
+            },
+        },
+    },
+    {
+        "name": "a_share_fund_flow_stocks",
+        "description": "Get A-share individual stock fund flow rankings (个股资金流向排行). Shows top stocks by main capital inflow (主力净流入) or outflow, with breakdown by super_large/large/medium/small order sizes. Data from Eastmoney via AKShare.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "direction": {"type": "string", "description": "inflow (主力净流入最多) or outflow (主力净流出最多). Default: inflow"},
+                "limit": {"type": "integer", "description": "Max stocks to return (default 30)"},
+            },
+        },
+    },
+    {
+        "name": "a_share_fund_flow_sectors",
+        "description": "Get A-share sector fund flow rankings (板块资金流向排行). Shows top sectors by main capital inflow/outflow. sector_type: 行业资金流 (industry) or 概念资金流 (concept). Each sector includes the top stock driving the flow.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "sector_type": {"type": "string", "description": "行业资金流 (industry) or 概念资金流 (concept). Default: 行业资金流"},
+                "direction": {"type": "string", "description": "inflow or outflow. Default: inflow"},
+                "limit": {"type": "integer", "description": "Max sectors to return (default 20)"},
+            },
+        },
+    },
+    {
+        "name": "a_share_money_flow_detail",
+        "description": "Get auction history + fund flow history for a specific A-share stock. Returns both daily auction rush scores and daily fund flow breakdowns for trend analysis.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "code": {"type": "string", "description": "6-digit A-share stock code (e.g., 000768, 600519)"},
+                "days": {"type": "integer", "description": "Days of history (default 14)"},
+            },
+            "required": ["code"],
+        },
+    },
 ]
 
 TOOL_MAP = {
@@ -3642,6 +3863,12 @@ TOOL_MAP = {
     "kol_thermometer_stock": tool_kol_thermometer_stock,
     "kol_list": tool_kol_list,
     "kol_thermometer_momentum": tool_kol_thermometer_momentum,
+    # A-Share Money Flow
+    "a_share_money_flow_status": tool_a_share_money_flow_status,
+    "a_share_auction_rankings": tool_a_share_auction_rankings,
+    "a_share_fund_flow_stocks": tool_a_share_fund_flow_stocks,
+    "a_share_fund_flow_sectors": tool_a_share_fund_flow_sectors,
+    "a_share_money_flow_detail": tool_a_share_money_flow_detail,
 }
 
 

@@ -2358,3 +2358,134 @@ export async function fetchKolStats(): Promise<KolThermometerStats | null> {
   if (!res.ok) return null;
   return res.json();
 }
+
+/* ── A-Share Money Flow (:8011) ── */
+
+const MONEY_FLOW_API = process.env.NEXT_PUBLIC_MONEY_FLOW_API_URL || "http://127.0.0.1:8011";
+
+export interface AuctionStock {
+  code: string;
+  name: string;
+  gap_pct: number;
+  volume: number;
+  amount: number;
+  turnover: number;
+  rush_score: number;
+  sector: string;
+}
+
+export interface AuctionSector {
+  sector: string;
+  stock_count: number;
+  avg_rush_score: number;
+  max_rush_score: number;
+  rush_stocks_count: number;
+  total_auction_amount: number;
+  top_stocks: string;
+}
+
+export interface FundFlowStock {
+  code: string;
+  name: string;
+  latest_price: number;
+  change_pct: number;
+  main_inflow: number;
+  main_inflow_pct: number;
+  super_large_inflow: number;
+  large_inflow: number;
+  medium_inflow: number;
+  small_inflow: number;
+}
+
+export interface FundFlowSector {
+  sector_name: string;
+  change_pct: number;
+  main_inflow: number;
+  main_inflow_pct: number;
+  super_large_inflow: number;
+  large_inflow: number;
+  medium_inflow: number;
+  small_inflow: number;
+  top_stock: string;
+}
+
+export interface MoneyFlowStats {
+  auction_days: number;
+  auction_stock_records: number;
+  fund_flow_days: number;
+  fund_flow_stock_records: number;
+  fund_flow_sector_records: number;
+}
+
+export async function fetchAuctionStocks(params?: {
+  min_gap?: number; min_score?: number; sector?: string; limit?: number;
+}): Promise<{ count: number; stocks: AuctionStock[] }> {
+  const sp = new URLSearchParams();
+  if (params?.min_gap) sp.set("min_gap", String(params.min_gap));
+  if (params?.min_score) sp.set("min_score", String(params.min_score));
+  if (params?.sector) sp.set("sector", params.sector);
+  if (params?.limit) sp.set("limit", String(params.limit ?? 50));
+  const qs = sp.toString();
+  const res = await fetch(`${MONEY_FLOW_API}/api/v1/auction/stocks${qs ? `?${qs}` : ""}`, {
+    next: { revalidate: 120 },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) return { count: 0, stocks: [] };
+  return res.json();
+}
+
+export async function fetchAuctionSectors(params?: {
+  limit?: number;
+}): Promise<{ count: number; sectors: AuctionSector[] }> {
+  const sp = new URLSearchParams();
+  if (params?.limit) sp.set("limit", String(params.limit ?? 30));
+  const qs = sp.toString();
+  const res = await fetch(`${MONEY_FLOW_API}/api/v1/auction/sectors${qs ? `?${qs}` : ""}`, {
+    next: { revalidate: 120 },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) return { count: 0, sectors: [] };
+  return res.json();
+}
+
+export async function fetchFundFlowStocks(params?: {
+  direction?: string; sector?: string; min_amount?: number; limit?: number;
+}): Promise<{ count: number; stocks: FundFlowStock[] }> {
+  const sp = new URLSearchParams();
+  if (params?.direction) sp.set("direction", params.direction);
+  if (params?.sector) sp.set("sector", params.sector);
+  if (params?.min_amount) sp.set("min_amount", String(params.min_amount));
+  if (params?.limit) sp.set("limit", String(params.limit ?? 50));
+  const qs = sp.toString();
+  const res = await fetch(`${MONEY_FLOW_API}/api/v1/fund-flow/stocks${qs ? `?${qs}` : ""}`, {
+    next: { revalidate: 120 },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) return { count: 0, stocks: [] };
+  return res.json();
+}
+
+export async function fetchFundFlowSectors(params?: {
+  sector_type?: string; direction?: string; limit?: number;
+}): Promise<{ count: number; sectors: FundFlowSector[] }> {
+  const sp = new URLSearchParams();
+  if (params?.sector_type) sp.set("sector_type", params.sector_type);
+  if (params?.direction) sp.set("direction", params.direction ?? "all");
+  if (params?.limit) sp.set("limit", String(params.limit ?? 30));
+  const qs = sp.toString();
+  const res = await fetch(`${MONEY_FLOW_API}/api/v1/fund-flow/sectors${qs ? `?${qs}` : ""}`, {
+    next: { revalidate: 120 },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) return { count: 0, sectors: [] };
+  return res.json();
+}
+
+export async function fetchMoneyFlowStats(): Promise<MoneyFlowStats | null> {
+  const res = await fetch(`${MONEY_FLOW_API}/api/v1/stats`, {
+    next: { revalidate: 300 },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
