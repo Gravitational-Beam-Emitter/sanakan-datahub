@@ -279,7 +279,7 @@ def deactivate_inactive_kols(conn: duckdb.DuckDBPyConnection) -> int:
     row = conn.execute("""
         UPDATE kols SET is_active = 0
         WHERE is_active = 1
-          AND last_active_date < CURRENT_DATE - INTERVAL '90 days'
+          AND CAST(last_active_date AS DATE) < CURRENT_DATE - INTERVAL '90 days'
     """).fetchone()
     return row[0] if row else 0
 

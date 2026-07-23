@@ -13,6 +13,7 @@ All functions return lists of post dicts + KOL candidate dicts.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import random
 import time
@@ -733,7 +734,7 @@ def scrape_wechat_kol(
                 if title and article_url:
                     posts.append({
                         "platform": "wechat",
-                        "post_id": article_url.split("/")[-1].rstrip(".html")[:32] if "/" in article_url else str(hash(article_url))[:16],
+                        "post_id": str(hashlib.md5((title + article_url).encode()).hexdigest())[:32],
                         "post_url": article_url,
                         "title": title[:200],
                         "content": summary or title,
