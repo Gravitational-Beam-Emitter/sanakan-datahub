@@ -223,7 +223,8 @@ def search_screening_fuzzy(
     tokens = query.split() if not has_cjk and " " in query else []
 
     base_sql = """SELECT id, name_en, name_cn, name_cn_norm, name_pinyin, source,
-           risk_category, pep_level, countries, aliases, notes
+           risk_category, pep_level, countries, aliases, addresses,
+           programs, source_date, name_type, notes
     FROM name_screening WHERE """
 
     # Per-field ILIKE clause used across all code paths (6 fields)

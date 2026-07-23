@@ -576,6 +576,7 @@ class NameScreeningHarness:
             if candidates.empty:
                 return {
                     "query": query,
+                    "matches": [],
                     "sanctions": [],
                     "peps": [],
                     "other": [],
@@ -607,8 +608,15 @@ class NameScreeningHarness:
 
         total = match_result["total_matches"]
 
+        matches = (
+            match_result["sanctions"] +
+            match_result["peps"] +
+            match_result["other"]
+        )
+
         return {
             "query": query,
+            "matches": matches,
             "sanctions": match_result["sanctions"],
             "peps": match_result["peps"],
             "other": match_result["other"],
