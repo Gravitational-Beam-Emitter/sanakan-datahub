@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from kol_thermometer.config import (
@@ -50,6 +50,7 @@ from kol_thermometer.config import (
     WECHAT_KOLS,
     WECHAT_ARTICLES_PER_KOL,
     WECHAT_RATE_LIMIT,
+    THERMOMETER_LOOKBACK_DAYS,
 )
 from kol_thermometer.storage import (
     init_db,
@@ -300,12 +301,14 @@ def fetch_youtube(conn, queries: Optional[List[str]] = None,
     for query in search_queries:
         try:
             logger.info(f"YouTube search: '{query}'")
+            published_after = (datetime.now(timezone.utc) - timedelta(days=THERMOMETER_LOOKBACK_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
             req = youtube.search().list(
                 q=query,
                 part="snippet",
                 maxResults=max_results,
                 type="video",
                 order="relevance" if not is_init else "date",
+                publishedAfter=published_after,
             )
             resp = req.execute()
             posts_data = []

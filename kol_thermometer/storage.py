@@ -356,15 +356,21 @@ def get_recent_posts(
     """, [limit]).df()
 
 
-def get_posts_without_mentions(conn: duckdb.DuckDBPyConnection, limit: int = 100) -> pd.DataFrame:
-    """Get posts that haven't been tagged for stock mentions yet."""
+def get_posts_without_mentions(conn: duckdb.DuckDBPyConnection, limit: int = 100,
+                                max_age_days: int = 7) -> pd.DataFrame:
+    """Get posts that haven't been tagged for stock mentions yet.
+
+    Only returns posts from the last max_age_days to avoid wasting LLM
+    API calls on stale content that won't affect the thermometer anyway.
+    """
     return conn.execute("""
         SELECT p.* FROM kol_posts p
         LEFT JOIN stock_mentions m ON p.id = m.post_id
         WHERE m.id IS NULL
+          AND CAST(p.posted_at AS DATE) >= CURRENT_DATE - ?
         ORDER BY p.fetched_at ASC
         LIMIT ?
-    """, [limit]).df()
+    """, [max_age_days, limit]).df()
 
 
 def post_exists(conn: duckdb.DuckDBPyConnection, platform: str, post_id: str) -> bool:
