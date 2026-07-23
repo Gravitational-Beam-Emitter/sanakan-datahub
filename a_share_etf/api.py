@@ -37,9 +37,20 @@ from a_share_etf.storage import (
     get_overview_history,
     get_available_dates,
 )
+import math
+
 from a_share_etf.etf_classification import list_sectors
 
 logger = logging.getLogger("a_share_etf.api")
+
+
+def _clean_records(records):
+    """Convert NaN/Inf to None so JSON serialization doesn't crash."""
+    for r in records:
+        for k, v in list(r.items()):
+            if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                r[k] = None
+    return records
 
 app = FastAPI(
     title="A股ETF资金流 API",
@@ -87,7 +98,8 @@ def etfs_by_date(date: str, sector: Optional[str] = None):
         df = get_etfs_by_date(conn, date, sector=sector)
         if df.empty:
             raise HTTPException(status_code=404, detail=f"No ETF data for {date}")
-        return {"date": date, "count": len(df), "etfs": df.to_dict(orient="records")}
+        records = _clean_records(_clean_records(df.to_dict(orient="records")))
+        return {"date": date, "count": len(df), "etfs": records}
     finally:
         conn.close()
 
@@ -100,7 +112,7 @@ def etf_history(code: str, limit: int = Query(default=60, le=200)):
         df = get_etf_history(conn, code, limit=limit)
         if df.empty:
             raise HTTPException(status_code=404, detail=f"No history for {code}")
-        return {"code": code, "count": len(df), "history": df.to_dict(orient="records")}
+        return {"code": code, "count": len(df), "history": _clean_records(df.to_dict(orient="records"))}
     finally:
         conn.close()
 
@@ -121,7 +133,7 @@ def sectors_by_date(date: str):
         df = get_sectors_by_date(conn, date)
         if df.empty:
             raise HTTPException(status_code=404, detail=f"No sector data for {date}")
-        return {"date": date, "sectors": df.to_dict(orient="records")}
+        return {"date": date, "sectors": _clean_records(df.to_dict(orient="records"))}
     finally:
         conn.close()
 
@@ -134,7 +146,7 @@ def sector_history(sector: str, limit: int = Query(default=60, le=200)):
         df = get_sector_history(conn, sector, limit=limit)
         if df.empty:
             raise HTTPException(status_code=404, detail=f"No history for sector: {sector}")
-        return {"sector": sector, "count": len(df), "history": df.to_dict(orient="records")}
+        return {"sector": sector, "count": len(df), "history": _clean_records(df.to_dict(orient="records"))}
     finally:
         conn.close()
 
@@ -164,25 +176,12 @@ def margin_history(
     conn = init_db(read_only=True)
     try:
         df = get_margin_history(conn, start=start, end=end, limit=limit)
-        return {"count": len(df), "data": df.to_dict(orient="records")}
+        return {"count": len(df), "data": _clean_records(df.to_dict(orient="records"))}
     finally:
         conn.close()
 
 
 # ── Market Overview ─────────────────────────────────────────
-
-@app.get("/api/v1/overview/{date}")
-def overview_by_date(date: str):
-    """Market overview (merged proxy) for a date."""
-    conn = init_db(read_only=True)
-    try:
-        row = get_overview_by_date(conn, date)
-        if row is None:
-            raise HTTPException(status_code=404, detail=f"No overview for {date}")
-        return row
-    finally:
-        conn.close()
-
 
 @app.get("/api/v1/overview/history")
 def overview_history(
@@ -194,7 +193,20 @@ def overview_history(
     conn = init_db(read_only=True)
     try:
         df = get_overview_history(conn, start=start, end=end, limit=limit)
-        return {"count": len(df), "data": df.to_dict(orient="records")}
+        return {"count": len(df), "data": _clean_records(df.to_dict(orient="records"))}
+    finally:
+        conn.close()
+
+
+@app.get("/api/v1/overview/{date}")
+def overview_by_date(date: str):
+    """Market overview (merged proxy) for a date."""
+    conn = init_db(read_only=True)
+    try:
+        row = get_overview_by_date(conn, date)
+        if row is None:
+            raise HTTPException(status_code=404, detail=f"No overview for {date}")
+        return row
     finally:
         conn.close()
 
